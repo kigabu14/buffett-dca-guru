@@ -210,6 +210,9 @@ export class YahooFinanceService {
 
   // Utility methods for formatting
   static formatCurrency(value: number, currency?: string): string {
+    if (value === null || value === undefined || isNaN(value)) {
+      return currency === 'THB' ? '฿0.00' : '$0.00';
+    }
     const symbol = currency === 'THB' ? '฿' : '$';
     return `${symbol}${value.toLocaleString('en-US', { 
       minimumFractionDigits: 2, 
