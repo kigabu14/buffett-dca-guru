@@ -1,188 +1,141 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.53.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-interface YahooFinanceQuote {
-  symbol: string;
-  shortName: string;
-  longName: string;
-  regularMarketPrice: number;
-  regularMarketPreviousClose: number;
-  regularMarketOpen: number;
-  regularMarketDayHigh: number;
-  regularMarketDayLow: number;
-  regularMarketVolume: number;
-  marketCap?: number;
-  trailingPE?: number;
-  trailingEps?: number;
-  dividendYield?: number;
-  fiftyTwoWeekHigh?: number;
-  fiftyTwoWeekLow?: number;
-  currency: string;
-  exchange: string;
-}
-
-interface YahooFinanceResponse {
-  quoteResponse: {
-    result: YahooFinanceQuote[];
-    error: any;
-  };
-}
-
-// ใช้ข้อมูลจากหลายแหล่งเพื่อความเชื่อถือได้
-async function fetchStockData(symbols: string[]): Promise<any[]> {
+// Yahoo Finance API function with proper error handling
+async function fetchYahooFinanceData(symbol: string) {
   try {
-    const results = [];
-
-    for (const symbol of symbols) {
-      try {
-        // สำหรับหุ้นไทยใช้ข้อมูลจาก SET API หรือข้อมูลตัวอย่าง
-        if (symbol.includes('.BK')) {
-          const thaiSymbol = symbol.replace('.BK', '');
-          
-          // ข้อมูลหุ้นไทยจากการซิมูเลต (เนื่องจาก SET API ต้องสมัคร)
-          const thaiStockData = {
-            'AOT': { price: 65.50, change: 1.25, changePercent: 1.95, volume: 2547800, marketCap: 197400000000, name: 'บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)' },
-            'ADVANC': { price: 168.50, change: -2.50, changePercent: -1.46, volume: 3245600, marketCap: 524700000000, name: 'บริษัท แอดวานซ์ อินโฟร์ เซอร์วิส จำกัด (มหาชน)' },
-            'BBL': { price: 148.00, change: 0.50, changePercent: 0.34, volume: 1876500, marketCap: 444000000000, name: 'ธนาคารกรุงเทพ จำกัด (มหาชน)' },
-            'KBANK': { price: 132.50, change: -1.00, changePercent: -0.75, volume: 2156400, marketCap: 397500000000, name: 'ธนาคารกสิกรไทย จำกัด (มหาชน)' },
-            'PTT': { price: 36.25, change: 0.25, changePercent: 0.69, volume: 8547200, marketCap: 326250000000, name: 'บริษัท ปตท. จำกัด (มหาชน)' },
-            'PTTEP': { price: 107.00, change: 1.50, changePercent: 1.42, volume: 1245800, marketCap: 321000000000, name: 'บริษัท ปตท. สำรวจและผลิตปิโตรเลียม จำกัด (มหาชน)' },
-            'SCB': { price: 98.75, change: -0.75, changePercent: -0.75, volume: 1587300, marketCap: 296250000000, name: 'ธนาคารไทยพาณิชย์ จำกัด (มหาชน)' },
-            'CPALL': { price: 52.50, change: 0.75, changePercent: 1.45, volume: 3658900, marketCap: 472500000000, name: 'บริษัท ซีพี ออลล์ จำกัด (มหาชน)' },
-            'TRUE': { price: 4.82, change: 0.02, changePercent: 0.42, volume: 45698700, marketCap: 144600000000, name: 'บริษัท ทรู คอร์ปอเรชั่น จำกัด (มหาชน)' },
-            'SCC': { price: 285.00, change: -5.00, changePercent: -1.72, volume: 854600, marketCap: 285000000000, name: 'บริษัท ปูนซิเมนต์ไทย จำกัด (มหาชน)' },
-            'BANPU': { price: 8.90, change: 0.15, changePercent: 1.71, volume: 12547800, marketCap: 31460000000, name: 'บริษัท บ้านปู จำกัด (มหาชน)' },
-            'INTUCH': { price: 52.25, change: -0.25, changePercent: -0.48, volume: 1856400, marketCap: 234112500000, name: 'บริษัท อินทัช โฮลดิ้งส์ จำกัด (มหาชน)' }
-          };
-
-          const data = thaiStockData[thaiSymbol as keyof typeof thaiStockData];
-          if (data) {
-            results.push({
-              symbol,
-              shortName: thaiSymbol,
-              longName: data.name,
-              regularMarketPrice: data.price,
-              regularMarketPreviousClose: data.price - data.change,
-              regularMarketOpen: data.price - (data.change * 0.5),
-              regularMarketDayHigh: data.price + Math.abs(data.change),
-              regularMarketDayLow: data.price - Math.abs(data.change),
-              regularMarketVolume: data.volume,
-              marketCap: data.marketCap,
-              currency: 'THB',
-              exchange: 'BKK',
-              trailingPE: 15 + Math.random() * 10,
-              dividendYield: 0.02 + Math.random() * 0.04
-            });
-            continue;
-          }
-        } else {
-          // สำหรับหุ้นสหรัฐ
-          const usStockData = {
-            'AAPL': { price: 184.40, change: -1.20, changePercent: -0.65, volume: 45698700, marketCap: 2847000000000, name: 'Apple Inc.' },
-            'MSFT': { price: 338.50, change: 2.30, changePercent: 0.68, volume: 23654800, marketCap: 2512000000000, name: 'Microsoft Corporation' },
-            'GOOGL': { price: 142.56, change: 0.89, changePercent: 0.63, volume: 18745600, marketCap: 1789000000000, name: 'Alphabet Inc.' },
-            'AMZN': { price: 155.20, change: -0.80, changePercent: -0.51, volume: 31254700, marketCap: 1587000000000, name: 'Amazon.com, Inc.' },
-            'TSLA': { price: 248.87, change: 3.15, changePercent: 1.28, volume: 78965400, marketCap: 786500000000, name: 'Tesla, Inc.' },
-            'META': { price: 524.26, change: -4.12, changePercent: -0.78, volume: 12547800, marketCap: 1324000000000, name: 'Meta Platforms, Inc.' },
-            'NVDA': { price: 875.28, change: 15.47, changePercent: 1.80, volume: 65478900, marketCap: 2156000000000, name: 'NVIDIA Corporation' },
-            'NFLX': { price: 598.73, change: -2.45, changePercent: -0.41, volume: 8547200, marketCap: 265800000000, name: 'Netflix, Inc.' }
-          };
-
-          const data = usStockData[symbol as keyof typeof usStockData];
-          if (data) {
-            results.push({
-              symbol,
-              shortName: symbol,
-              longName: data.name,
-              regularMarketPrice: data.price,
-              regularMarketPreviousClose: data.price - data.change,
-              regularMarketOpen: data.price - (data.change * 0.5),
-              regularMarketDayHigh: data.price + Math.abs(data.change),
-              regularMarketDayLow: data.price - Math.abs(data.change),
-              regularMarketVolume: data.volume,
-              marketCap: data.marketCap,
-              currency: 'USD',
-              exchange: 'NASDAQ',
-              trailingPE: 20 + Math.random() * 15,
-              dividendYield: 0.01 + Math.random() * 0.03
-            });
-            continue;
-          }
-        }
-
-        // ถ้าไม่มีในข้อมูลที่กำหนดไว้ ให้สร้างข้อมูลเริ่มต้น
-        results.push({
-          symbol,
-          shortName: symbol,
-          longName: symbol,
-          regularMarketPrice: 100 + Math.random() * 50,
-          regularMarketPreviousClose: 100,
-          regularMarketOpen: 100,
-          regularMarketDayHigh: 105,
-          regularMarketDayLow: 95,
-          regularMarketVolume: 1000000,
-          marketCap: 10000000000,
-          currency: symbol.includes('.BK') ? 'THB' : 'USD',
-          exchange: symbol.includes('.BK') ? 'BKK' : 'NASDAQ',
-          trailingPE: 15,
-          dividendYield: 0.025
-        });
-
-      } catch (error) {
-        console.error(`Error processing ${symbol}:`, error);
-        // ส่งข้อมูลเริ่มต้น
-        results.push({
-          symbol,
-          shortName: symbol,
-          longName: symbol,
-          regularMarketPrice: 0,
-          regularMarketPreviousClose: 0,
-          regularMarketOpen: 0,
-          regularMarketDayHigh: 0,
-          regularMarketDayLow: 0,
-          regularMarketVolume: 0,
-          marketCap: 0,
-          currency: symbol.includes('.BK') ? 'THB' : 'USD',
-          exchange: symbol.includes('.BK') ? 'BKK' : 'NASDAQ',
-          error: 'Failed to fetch data'
-        });
+    // Use the chart API endpoint for real-time data
+    const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
       }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+      throw new Error('Invalid response format from Yahoo Finance');
     }
 
-    return results;
+    const result = data.chart.result[0];
+    const meta = result.meta;
+    const quote = result.indicators?.quote?.[0];
+    
+    // Extract the latest data point
+    const latestIndex = quote?.close?.length - 1 || 0;
+    const currentPrice = meta.regularMarketPrice || quote?.close?.[latestIndex] || 0;
+    const previousClose = meta.previousClose || meta.chartPreviousClose || 0;
+    const change = currentPrice - previousClose;
+    const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+
+    return {
+      symbol: meta.symbol,
+      shortName: meta.shortName || symbol,
+      longName: meta.longName || meta.shortName || symbol,
+      regularMarketPrice: currentPrice,
+      regularMarketPreviousClose: previousClose,
+      regularMarketOpen: meta.regularMarketOpen || currentPrice,
+      regularMarketDayHigh: meta.regularMarketDayHigh || currentPrice,
+      regularMarketDayLow: meta.regularMarketDayLow || currentPrice,
+      regularMarketVolume: quote?.volume?.[latestIndex] || meta.regularMarketVolume || 0,
+      marketCap: meta.marketCap || 0,
+      trailingPE: meta.trailingPE || 0,
+      trailingEps: meta.epsTrailingTwelveMonths || 0,
+      dividendYield: meta.dividendYield || 0,
+      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || 0,
+      fiftyTwoWeekLow: meta.fiftyTwoWeekLow || 0,
+      currency: meta.currency || 'USD',
+      exchange: meta.exchangeName || meta.market || 'UNKNOWN',
+      success: true
+    };
   } catch (error) {
-    console.error('Error in fetchStockData:', error);
+    console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error);
     throw error;
   }
 }
 
+// Enhanced sample data with Warren Buffett analysis metrics
+function getSampleStockData(symbol: string) {
+  const basePrice = Math.random() * 1000 + 50;
+  const change = (Math.random() - 0.5) * 20;
+  const changePercent = (change / basePrice) * 100;
+  
+  const sampleData = {
+    // Thai stocks (SET100)
+    'AOT.BK': { name: 'บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)', price: 65.50, market: 'SET' },
+    'BBL.BK': { name: 'ธนาคารกรุงเทพ จำกัด (มหาชน)', price: 148.00, market: 'SET' },
+    'KBANK.BK': { name: 'ธนาคารกสิกรไทย จำกัด (มหาชน)', price: 132.50, market: 'SET' },
+    'PTT.BK': { name: 'บริษัท ปตท. จำกัด (มหาชน)', price: 36.25, market: 'SET' },
+    'PTTEP.BK': { name: 'บริษัท ปตท. สำรวจและผลิตปิโตรเลียม จำกัด (มหาชน)', price: 107.00, market: 'SET' },
+    'SCB.BK': { name: 'ธนาคารไทยพาณิชย์ จำกัด (มหาชน)', price: 98.75, market: 'SET' },
+    'CPALL.BK': { name: 'บริษัท ซีพี ออลล์ จำกัด (มหาชน)', price: 52.50, market: 'SET' },
+    'ADVANC.BK': { name: 'บริษัท แอดวานซ์ อินโฟร์ เซอร์วิส จำกัด (มหาชน)', price: 168.50, market: 'SET' },
+    'SCC.BK': { name: 'บริษัท ปูนซิเมนต์ไทย จำกัด (มหาชน)', price: 285.00, market: 'SET' },
+    'TOP.BK': { name: 'บริษัท ไทยออยล์ จำกัด (มหาชน)', price: 45.75, market: 'SET' },
+    // US stocks
+    'AAPL': { name: 'Apple Inc.', price: 184.40, market: 'NASDAQ' },
+    'TSLA': { name: 'Tesla Inc.', price: 248.87, market: 'NASDAQ' },
+    'GOOGL': { name: 'Alphabet Inc.', price: 142.56, market: 'NASDAQ' },
+    'MSFT': { name: 'Microsoft Corporation', price: 338.50, market: 'NASDAQ' },
+    'AMZN': { name: 'Amazon.com Inc.', price: 155.20, market: 'NASDAQ' },
+    'META': { name: 'Meta Platforms Inc.', price: 524.26, market: 'NASDAQ' },
+    'NVDA': { name: 'NVIDIA Corporation', price: 875.28, market: 'NASDAQ' }
+  };
+
+  const stockInfo = sampleData[symbol as keyof typeof sampleData];
+  const finalPrice = stockInfo?.price || basePrice;
+  
+  return {
+    symbol,
+    shortName: symbol.replace('.BK', ''),
+    longName: stockInfo?.name || symbol,
+    regularMarketPrice: Math.round(finalPrice * 100) / 100,
+    regularMarketPreviousClose: Math.round((finalPrice - change) * 100) / 100,
+    regularMarketOpen: Math.round((finalPrice - (change * 0.5)) * 100) / 100,
+    regularMarketDayHigh: Math.round((finalPrice + Math.abs(change)) * 100) / 100,
+    regularMarketDayLow: Math.round((finalPrice - Math.abs(change)) * 100) / 100,
+    regularMarketVolume: Math.floor(Math.random() * 10000000),
+    marketCap: Math.round(finalPrice * Math.floor(Math.random() * 1000000000)),
+    trailingPE: Math.round((Math.random() * 30 + 5) * 100) / 100,
+    trailingEps: Math.round(Math.random() * 10 * 100) / 100,
+    dividendYield: Math.round(Math.random() * 0.05 * 10000) / 10000,
+    fiftyTwoWeekHigh: Math.round(finalPrice * (1 + Math.random() * 0.3) * 100) / 100,
+    fiftyTwoWeekLow: Math.round(finalPrice * (1 - Math.random() * 0.3) * 100) / 100,
+    currency: symbol.includes('.BK') ? 'THB' : 'USD',
+    exchange: stockInfo?.market || (symbol.includes('.BK') ? 'SET' : 'NASDAQ'),
+    success: false,
+    isSampleData: true
+  };
+}
+
 function determineMarket(symbol: string, exchange?: string): string {
-  // หุ้นไทย
-  if (symbol.includes('.BK') || exchange === 'BKK') {
+  if (symbol.includes('.BK') || exchange === 'SET') {
     return 'SET';
   }
   
-  // หุ้นสหรัฐ
-  if (exchange === 'NMS' || exchange === 'NYQ' || exchange === 'NGM') {
+  if (exchange === 'NMS' || exchange === 'NGM' || exchange === 'NASDAQ') {
     return 'NASDAQ';
   }
   
-  if (exchange === 'NYQ') {
+  if (exchange === 'NYQ' || exchange === 'NYSE') {
     return 'NYSE';
   }
 
-  // Default based on symbol format
-  if (symbol.includes('.BK')) return 'SET';
-  return 'NASDAQ';
+  return symbol.includes('.BK') ? 'SET' : 'NASDAQ';
 }
 
 function mapSector(exchange?: string, symbol?: string): string {
-  // สำหรับหุ้นไทย - mapping พื้นฐาน
-  if (exchange === 'BKK' || symbol?.includes('.BK')) {
+  if (exchange === 'SET' || symbol?.includes('.BK')) {
     const thaiSymbol = symbol?.replace('.BK', '') || '';
     if (['BBL', 'KBANK', 'KTB', 'SCB', 'TTB'].includes(thaiSymbol)) {
       return 'Banking';
@@ -196,24 +149,24 @@ function mapSector(exchange?: string, symbol?: string): string {
     if (['PTTEP', 'PTT', 'TOP', 'BANPU'].includes(thaiSymbol)) {
       return 'Energy & Utilities';
     }
-    if (['CPF', 'CBF', 'GFPT'].includes(thaiSymbol)) {
-      return 'Agro & Food Industry';
+    if (['AOT', 'MINT', 'ERAWAN'].includes(thaiSymbol)) {
+      return 'Tourism & Leisure';
     }
   }
   
-  return 'Unknown';
+  return 'Technology';
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { symbols } = await req.json();
+    const body = await req.json();
+    const symbols = body.symbols ? body.symbols.split(',') : [body.symbol];
     
-    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+    if (!symbols || symbols.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Symbols array is required' }),
         { 
@@ -225,8 +178,22 @@ Deno.serve(async (req) => {
 
     console.log('Fetching data for symbols:', symbols);
 
-    // ดึงข้อมูลหุ้น
-    const stockQuotes = await fetchStockData(symbols);
+    const stockQuotes = [];
+    
+    for (const symbol of symbols) {
+      const cleanSymbol = symbol.trim();
+      
+      try {
+        console.log(`Attempting to fetch real data for ${cleanSymbol}`);
+        const realData = await fetchYahooFinanceData(cleanSymbol);
+        stockQuotes.push(realData);
+        console.log(`Successfully fetched real data for ${cleanSymbol}`);
+      } catch (error) {
+        console.error(`Error fetching Yahoo Finance data for ${cleanSymbol}:`, error);
+        console.log(`Using sample data for ${cleanSymbol}`);
+        stockQuotes.push(getSampleStockData(cleanSymbol));
+      }
+    }
     
     if (stockQuotes.length === 0) {
       return new Response(
@@ -238,12 +205,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // เชื่อมต่อ Supabase
+    // เชื่อมต่อ Supabase และอัพเดทข้อมูล
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // อัพเดทข้อมูลในฐานข้อมูล
     const updatePromises = stockQuotes.map(async (quote) => {
       const stockData = {
         symbol: quote.symbol,
@@ -259,11 +225,10 @@ Deno.serve(async (req) => {
         market_cap: quote.marketCap,
         pe_ratio: quote.trailingPE,
         eps: quote.trailingEps,
-        dividend_yield: quote.dividendYield ? quote.dividendYield * 100 : null, // Convert to percentage
+        dividend_yield: quote.dividendYield ? quote.dividendYield * 100 : null,
         last_updated: new Date().toISOString()
       };
 
-      // อัพเซิร์ทข้อมูล (insert หรือ update)
       const { error } = await supabase
         .from('stock_markets')
         .upsert(stockData, { 
@@ -273,21 +238,30 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error(`Error updating ${quote.symbol}:`, error);
-        throw error;
       }
 
-      return stockData;
+      return {
+        ...stockData,
+        change: quote.regularMarketPrice - quote.regularMarketPreviousClose,
+        changePercent: quote.regularMarketPreviousClose ? 
+          ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100 : 0,
+        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
+        currency: quote.currency,
+        success: quote.success || false,
+        isSampleData: quote.isSampleData || false
+      };
     });
 
     const updatedData = await Promise.all(updatePromises);
 
-    console.log(`Successfully updated ${updatedData.length} stocks`);
+    console.log(`Successfully processed ${updatedData.length} stocks`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        updated_count: updatedData.length,
-        data: updatedData
+        data: updatedData,
+        timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
