@@ -1,302 +1,319 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, DollarSign, Target, TrendingDown, Plus, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { useDashboardData } from '@/hooks/useDashboardData';
-import { useLanguage } from '@/hooks/useLanguage';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { YahooFinanceService, StockData } from "@/services/YahooFinanceService";
+import { RealTimeStockPrice } from "@/components/RealTimeStockPrice";
+import { DCASimulator } from "@/components/DCASimulator";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { useLanguage } from "@/hooks/useLanguage";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { TrendingUp, TrendingDown, RefreshCw, Activity, DollarSign, BarChart3, Target } from "lucide-react";
 
 const Dashboard = () => {
   const { portfolioStats, recentActivities, loading, refreshData } = useDashboardData();
   const { t } = useLanguage();
-  const navigate = useNavigate();
-  const [analyzing, setAnalyzing] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [stockData, setStockData] = useState<StockData[]>([]);
+  const [loadingStocks, setLoadingStocks] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [userStocks, setUserStocks] = useState<any[]>([]);
 
-  const runBuffettAnalysis = async () => {
-    if (!portfolioStats?.topStocks.length) return;
-    
-    setAnalyzing(true);
-    try {
-      // Run Buffett analysis for all stocks in portfolio
-      const symbols = portfolioStats.topStocks.map(stock => stock.symbol);
-      
-      for (const symbol of symbols) {
-        try {
-          const { error } = await supabase.functions.invoke('buffett-analysis', {
-            body: { symbol }
-          });
-          
-          if (error) {
-            console.error(`Error analyzing ${symbol}:`, error);
-          }
-        } catch (err) {
-          console.error(`Failed to analyze ${symbol}:`, err);
-        }
-      }
-      
-      // Refresh dashboard data after analysis
-      await refreshData();
-    } catch (error) {
-      console.error('Error running Buffett analysis:', error);
-    } finally {
-      setAnalyzing(false);
+  // Popular stocks to display on dashboard
+  const popularStocks = [
+    'BBL.BK', 'CPALL.BK', 'PTT.BK', 'KBANK.BK', 'AOT.BK',
+    'AAPL', 'TSLA', 'GOOGL', 'MSFT', 'NVDA'
+  ];
+
+  useEffect(() => {
+    fetchStockData();
+    if (user) {
+      fetchUserStocks();
     }
+  }, [user]);
+
+  const fetchUserStocks = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('stock_investments')
+        .select('symbol, company_name, quantity, buy_price, current_price')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      setUserStocks(data || []);
+    } catch (error) {
+      console.error('Error fetching user stocks:', error);
+    }
+  };
+
+  const fetchStockData = async () => {
+    setLoadingStocks(true);
+    try {
+      const stocks = await YahooFinanceService.getStocks(popularStocks);
+      setStockData(stocks);
+      setLastUpdate(new Date());
+      
+      const realDataCount = stocks.filter(s => s.success).length;
+      const sampleDataCount = stocks.filter(s => s.isSampleData).length;
+      
+      if (sampleDataCount > 0) {
+        toast({
+          title: "ข้อมูลบางส่วนจาก Yahoo Finance",
+          description: `ดึงข้อมูลจริง ${realDataCount} หุ้น, ข้อมูลตัวอย่าง ${sampleDataCount} หุ้น`,
+          variant: "default"
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stock data:', error);
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถดึงข้อมูลหุ้นได้",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingStocks(false);
+    }
+  };
+
+  const getDCAScoreColor = (score: number) => {
+    if (score >= 7) return "bg-green-100 text-green-800";
+    if (score >= 5) return "bg-blue-100 text-blue-800";
+    if (score >= 3) return "bg-yellow-100 text-yellow-800";
+    return "bg-red-100 text-red-800";
+  };
+
+  const getPriceChangeColor = (change: number) => {
+    if (change > 0) return "text-green-600";
+    if (change < 0) return "text-red-600";
+    return "text-muted-foreground";
+  };
+
+  const marketStats = {
+    totalStocks: stockData.length,
+    gainers: stockData.filter(s => s.changePercent > 0).length,
+    losers: stockData.filter(s => s.changePercent < 0).length,
+    avgChange: stockData.length > 0 ? 
+      stockData.reduce((sum, s) => sum + s.changePercent, 0) / stockData.length : 0
   };
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-premium bg-clip-text text-transparent">
-            แดชบอร์ด
+            แดชบอร์ดหุ้น
           </h1>
           <p className="text-muted-foreground">
-            ภาพรวมพอร์ตการลงทุนของคุณ
+            ข้อมูลหุ้นแบบเรียลไทม์จาก Yahoo Finance API
+            {lastUpdate && (
+              <span className="ml-2">
+                อัพเดทล่าสุด: {lastUpdate.toLocaleTimeString('th-TH')}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            onClick={runBuffettAnalysis} 
-            disabled={analyzing || !portfolioStats?.topStocks.length}
-            variant="outline"
-            className="border-primary/20"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${analyzing ? 'animate-spin' : ''}`} />
-            วิเคราะห์ Buffett
-          </Button>
-          <Button 
-            onClick={() => navigate('/portfolio')}
-            className="bg-gradient-premium hover:shadow-gold"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            เพิ่มหุ้น
-          </Button>
-        </div>
+        <Button 
+          onClick={fetchStockData}
+          disabled={loadingStocks}
+          variant="outline"
+          size="sm"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${loadingStocks ? 'animate-spin' : ''}`} />
+          รีเฟรช
+        </Button>
       </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      
+      {/* Market Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">มูลค่าพอร์ตรวม</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">พอร์ตโฟลิโอ</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ฿{loading ? '...' : (portfolioStats?.totalValue || 0).toLocaleString()}
+              {new Intl.NumberFormat('th-TH', { 
+                style: 'currency', 
+                currency: 'THB' 
+              }).format(portfolioStats?.totalValue || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
-              จาก {loading ? '...' : portfolioStats?.totalStocks || 0} หุ้น
+              มูลค่ารวมการลงทุน
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">กำไร/ขาดทุน</CardTitle>
-            {(portfolioStats?.totalGainLoss || 0) >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-green-500" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            )}
+            <CardTitle className="text-sm font-medium">ติดตามหุ้น</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${(portfolioStats?.totalGainLoss || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {loading ? '...' : (
-                <>
-                  {(portfolioStats?.totalGainLoss || 0) >= 0 ? '+' : ''}฿{(portfolioStats?.totalGainLoss || 0).toLocaleString()}
-                </>
-              )}
-            </div>
+            <div className="text-2xl font-bold">{marketStats.totalStocks}</div>
             <p className="text-xs text-muted-foreground">
-              {loading ? '...' : (
-                <>
-                  {(portfolioStats?.gainLossPercentage || 0) >= 0 ? '+' : ''}{(portfolioStats?.gainLossPercentage || 0).toFixed(2)}%
-                </>
-              )}
+              หุ้นทั้งหมด
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">เงินปันผล/ปี</CardTitle>
-            <DollarSign className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">หุ้นขาขึ้น</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">
-              {loading ? '...' : (portfolioStats?.totalDividendYield || 0).toFixed(2)}%
-            </div>
+            <div className="text-2xl font-bold text-green-600">{marketStats.gainers}</div>
             <p className="text-xs text-muted-foreground">
-              อัตราผลตอบแทนเฉลี่ย
+              จาก {marketStats.totalStocks} หุ้น
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">คะแนน Buffett เฉลี่ย</CardTitle>
-            <Target className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">หุ้นขาลง</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : Math.round(portfolioStats?.averageBuffettScore || 0)}/55
-            </div>
+            <div className="text-2xl font-bold text-red-600">{marketStats.losers}</div>
             <p className="text-xs text-muted-foreground">
-              คุณภาพโดยรวม: {
-                loading ? '...' : 
-                (portfolioStats?.averageBuffettScore || 0) >= 40 ? 'ดีเยี่ยม' :
-                (portfolioStats?.averageBuffettScore || 0) >= 30 ? 'ดี' :
-                (portfolioStats?.averageBuffettScore || 0) >= 20 ? 'ปานกลาง' : 'ควรปรับปรุง'
-              }
+              จาก {marketStats.totalStocks} หุ้น
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Portfolio Distribution & Top Holdings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Holdings */}
+      {/* My Portfolio Holdings with Real-time Prices */}
+      {userStocks.length > 0 && (
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader>
-            <CardTitle>หุ้นใหญ่ในพอร์ต</CardTitle>
-            <CardDescription>หุ้นที่มีสัดส่วนมากที่สุด</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              พอร์ตของฉัน
+            </CardTitle>
+            <CardDescription>
+              หุ้นในพอร์ตของคุณพร้อมราคาเรียลไทม์
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {loading ? (
-              <div className="text-center text-muted-foreground">กำลังโหลด...</div>
-            ) : portfolioStats?.topStocks.length ? (
-              portfolioStats.topStocks.slice(0, 5).map((stock, index) => (
-                <div key={stock.symbol} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-premium flex items-center justify-center">
-                      <span className="text-sm font-bold text-primary-foreground">
-                        {index + 1}
-                      </span>
-                    </div>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {userStocks.map((stock) => (
+                <Card key={stock.symbol} className="p-4">
+                  <div className="flex items-center justify-between mb-2">
                     <div>
-                      <p className="font-semibold">{stock.symbol}</p>
-                      <p className="text-sm text-muted-foreground">{stock.name}</p>
+                      <h4 className="font-semibold">{stock.symbol}</h4>
+                      <p className="text-sm text-muted-foreground">{stock.company_name}</p>
                     </div>
+                    <Badge variant="outline">{stock.quantity} หุ้น</Badge>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">฿{stock.value.toLocaleString()}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-muted-foreground">{stock.percentage.toFixed(1)}%</p>
-                      <Badge 
-                        variant={stock.gainLoss >= 0 ? "default" : "destructive"}
-                        className="text-xs"
-                      >
-                        {stock.gainLoss >= 0 ? '+' : ''}{stock.gainLossPercent.toFixed(1)}%
-                      </Badge>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>ราคาซื้อ:</span>
+                      <span>฿{stock.buy_price.toFixed(2)}</span>
                     </div>
+                    <RealTimeStockPrice 
+                      symbol={stock.symbol} 
+                      buyPrice={stock.buy_price}
+                      className="text-sm"
+                    />
                   </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-muted-foreground">
-                ยังไม่มีการลงทุน กรุณาเพิ่มหุ้นในพอร์ต
-              </div>
-            )}
+                </Card>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Buffett Score Summary */}
-        <Card className="border-border/50 bg-card/50 backdrop-blur">
-          <CardHeader>
-            <CardTitle>คะแนน Buffett Analysis</CardTitle>
-            <CardDescription>การวิเคราะห์ตามหลักการ Warren Buffett</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loading ? (
-              <div className="text-center text-muted-foreground">กำลังโหลด...</div>
-            ) : portfolioStats?.topStocks.length ? (
-              portfolioStats.topStocks.slice(0, 5).map((stock) => (
-                <div key={stock.symbol} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div>
-                    <p className="font-semibold">{stock.symbol}</p>
-                    <p className="text-sm text-muted-foreground">{stock.name}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-12 h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-premium rounded-full transition-all duration-300"
-                          style={{ width: `${(stock.buffettScore / 55) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-semibold">{stock.buffettScore}/55</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {stock.buffettScore >= 40 ? 'DCA เพิ่ม' : stock.buffettScore >= 30 ? 'ถือไว้' : 'ลด/ขาย'}
-                      </p>
-                      <Badge 
-                        variant={
-                          stock.buffettScore >= 40 ? "default" : 
-                          stock.buffettScore >= 30 ? "secondary" : "destructive"
-                        }
-                        className="text-xs"
-                      >
-                        {stock.buffettScore >= 40 ? 'BUY' : stock.buffettScore >= 30 ? 'HOLD' : 'SELL'}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-muted-foreground">
-                ยังไม่มีข้อมูลการวิเคราะห์ กรุณากดปุ่ม "วิเคราะห์ Buffett"
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activity */}
+      {/* Popular Stocks Table */}
       <Card className="border-border/50 bg-card/50 backdrop-blur">
         <CardHeader>
-          <CardTitle>กิจกรรมล่าสุด</CardTitle>
-          <CardDescription>การซื้อขายและการเปลี่ยนแปลงในพอร์ต</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            หุ้นยอดนิยม
+          </CardTitle>
+          <CardDescription>
+            ข้อมูลหุ้น SET100 และ US ที่ได้รับความนิยม
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {loading ? (
-              <div className="text-center text-muted-foreground">กำลังโหลด...</div>
-            ) : recentActivities.length > 0 ? (
-              recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <TrendingUp className="h-4 w-4 text-green-500" />
-                    </div>
-                    <div>
-                      <p className="font-semibold">{activity.description}</p>
-                      <p className="text-sm text-muted-foreground">{activity.details}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(activity.date).toLocaleDateString('th-TH', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-muted-foreground">
-                ยังไม่มีกิจกรรมการลงทุน
-              </div>
-            )}
-          </div>
+          {loadingStocks ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+              กำลังโหลดข้อมูล...
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>สัญลักษณ์</TableHead>
+                  <TableHead>ชื่อบริษัท</TableHead>
+                  <TableHead>ตลาด</TableHead>
+                  <TableHead className="text-right">ราคา</TableHead>
+                  <TableHead className="text-right">เปลี่ยนแปลง</TableHead>
+                  <TableHead className="text-right">%เปลี่ยนแปลง</TableHead>
+                  <TableHead className="text-right">Volume</TableHead>
+                  <TableHead className="text-center">DCA Score</TableHead>
+                  <TableHead className="text-center">สถานะ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stockData.map((stock) => {
+                  const dcaScore = YahooFinanceService.calculateDCAScore(stock);
+                  const recommendation = YahooFinanceService.getDCARecommendation(dcaScore);
+                  
+                  return (
+                    <TableRow key={stock.symbol}>
+                      <TableCell className="font-medium">{stock.symbol}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {stock.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{stock.market}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
+                      </TableCell>
+                      <TableCell className={`text-right ${getPriceChangeColor(stock.change)}`}>
+                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                      </TableCell>
+                      <TableCell className={`text-right ${getPriceChangeColor(stock.changePercent)}`}>
+                        {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {YahooFinanceService.formatLargeNumber(stock.volume)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={getDCAScoreColor(dcaScore)}>
+                          {dcaScore}/8
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {stock.isSampleData ? (
+                          <Badge variant="secondary">ตัวอย่าง</Badge>
+                        ) : (
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            จริง
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
+
+      {/* DCA Simulator */}
+      <DCASimulator />
     </div>
   );
 };

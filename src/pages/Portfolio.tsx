@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StockSelector } from '@/components/StockSelector';
+import { RealTimeStockPrice } from '@/components/RealTimeStockPrice';
+import { DCASimulator } from '@/components/DCASimulator';
 import { Plus, RefreshCw, TrendingUp, TrendingDown, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -43,6 +45,7 @@ const Portfolio = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState('');
   const [stockPrice, setStockPrice] = useState<number>(0);
+  const [currentStockData, setCurrentStockData] = useState<any>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -61,6 +64,20 @@ const Portfolio = () => {
       fetchInvestments();
     }
   }, [user]);
+
+  // อัพเดทข้อมูลเมื่อเลือกหุ้น
+  useEffect(() => {
+    if (currentStockData) {
+      setFormData(prev => ({
+        ...prev,
+        symbol: currentStockData.symbol,
+        company_name: currentStockData.name,
+        market: currentStockData.market,
+        buy_price: currentStockData.price.toString() // ใช้ราคาปัจจุบันเป็น default
+      }));
+      setStockPrice(currentStockData.price);
+    }
+  }, [currentStockData]);
 
   const fetchInvestments = async () => {
     try {
