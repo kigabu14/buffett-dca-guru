@@ -141,7 +141,12 @@ const Portfolio = () => {
   };
 
   const handleAddInvestment = async (investmentData: any) => {
-    if (!user) return;
+    if (!user) {
+      console.error('No user found for investment submission');
+      return;
+    }
+
+    console.log('Starting investment submission:', { investmentData, userId: user.id });
 
     try {
       const dataWithUserId = {
@@ -149,16 +154,25 @@ const Portfolio = () => {
         user_id: user.id
       };
 
-      const { error } = editingInvestment 
+      console.log('Data to submit:', dataWithUserId);
+
+      const { data, error } = editingInvestment 
         ? await supabase
             .from('stock_investments')
             .update(dataWithUserId)
             .eq('id', editingInvestment.id)
+            .select()
         : await supabase
             .from('stock_investments')
-            .insert(dataWithUserId);
+            .insert(dataWithUserId)
+            .select();
 
-      if (error) throw error;
+      console.log('Supabase response:', { data, error });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       toast({
         title: "สำเร็จ",
