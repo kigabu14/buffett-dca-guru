@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 // Interface definitions
@@ -21,8 +22,6 @@ export interface StockData {
   roe: number;
   debtToEquity: number;
   profitMargin: number;
-  
-  isSampleData?: boolean;
 }
 
 interface StockResponse {
@@ -35,19 +34,41 @@ export class YahooFinanceService {
   // Fetch stock data from Yahoo Finance API via Supabase edge function
   static async getStock(symbol: string): Promise<StockData> {
     try {
+      console.log(`Fetching stock data for: ${symbol}`);
+      
       const { data, error } = await supabase.functions.invoke('stock-data', {
         body: { symbols: [symbol] }
       });
 
       if (error) {
         console.error('Error from stock-data function:', error);
-        throw error;
+        throw new Error(`ไม่สามารถดึงข้อมูลหุ้น ${symbol} ได้: ${error.message}`);
       }
 
       if (data?.data && data.data.length > 0) {
-        return data.data[0];
+        const stockData = data.data[0];
+        return {
+          symbol: stockData.symbol,
+          name: stockData.company_name || stockData.name || symbol,
+          market: stockData.market,
+          currency: symbol.includes('.BK') ? 'THB' : 'USD',
+          price: stockData.current_price || 0,
+          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
+          changePercent: stockData.previous_close ? 
+            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
+          marketCap: stockData.market_cap || 0,
+          pe: stockData.pe_ratio || 0,
+          eps: stockData.eps || 0,
+          dividendYield: stockData.dividend_yield || 0,
+          weekHigh52: 0,
+          weekLow52: 0,
+          volume: stockData.volume || 0,
+          roe: 0,
+          debtToEquity: 0,
+          profitMargin: 0
+        };
       } else {
-        throw new Error(`ไม่สามารถดึงข้อมูลหุ้น ${symbol} ได้จาก Yahoo Finance`);
+        throw new Error(`ไม่พบข้อมูลหุ้น ${symbol}`);
       }
     } catch (error) {
       console.error(`Error fetching stock ${symbol}:`, error);
@@ -58,19 +79,40 @@ export class YahooFinanceService {
   // Fetch multiple stocks at once
   static async getStocks(symbols: string[]): Promise<StockData[]> {
     try {
+      console.log(`Fetching data for ${symbols.length} stocks`);
+      
       const { data, error } = await supabase.functions.invoke('stock-data', {
         body: { symbols }
       });
 
       if (error) {
         console.error('Error from stock-data function:', error);
-        throw error;
+        throw new Error(`ไม่สามารถดึงข้อมูลหุ้นได้: ${error.message}`);
       }
 
       if (data?.data && data.data.length > 0) {
-        return data.data;
+        return data.data.map((stockData: any) => ({
+          symbol: stockData.symbol,
+          name: stockData.company_name || stockData.name || stockData.symbol,
+          market: stockData.market,
+          currency: stockData.symbol.includes('.BK') ? 'THB' : 'USD',
+          price: stockData.current_price || 0,
+          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
+          changePercent: stockData.previous_close ? 
+            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
+          marketCap: stockData.market_cap || 0,
+          pe: stockData.pe_ratio || 0,
+          eps: stockData.eps || 0,
+          dividendYield: stockData.dividend_yield || 0,
+          weekHigh52: 0,
+          weekLow52: 0,
+          volume: stockData.volume || 0,
+          roe: 0,
+          debtToEquity: 0,
+          profitMargin: 0
+        }));
       } else {
-        throw new Error(`ไม่สามารถดึงข้อมูลหุ้นได้จาก Yahoo Finance`);
+        throw new Error('ไม่พบข้อมูลหุ้น');
       }
     } catch (error) {
       console.error('Error fetching stocks:', error);
@@ -81,6 +123,8 @@ export class YahooFinanceService {
   // Check Yahoo Finance API status
   static async checkApiStatus(): Promise<{ status: 'connected' | 'disconnected', message: string }> {
     try {
+      console.log('Checking Yahoo Finance API status...');
+      
       const { data, error } = await supabase.functions.invoke('stock-data', {
         body: { symbols: ['AAPL'] } // Test with a simple US stock
       });
@@ -88,18 +132,25 @@ export class YahooFinanceService {
       if (error) {
         return { 
           status: 'disconnected', 
-          message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้' 
+          message: `ไม่สามารถเชื่อมต่อ Yahoo Finance API: ${error.message}` 
         };
       }
 
-      return { 
-        status: 'connected', 
-        message: 'เชื่อมต่อกับ Yahoo Finance API สำเร็จ' 
-      };
+      if (data?.success) {
+        return { 
+          status: 'connected', 
+          message: 'เชื่อมต่อ Yahoo Finance API สำเร็จ' 
+        };
+      } else {
+        return { 
+          status: 'disconnected', 
+          message: 'Yahoo Finance API ไม่พร้อมใช้งาน' 
+        };
+      }
     } catch (error) {
       return { 
         status: 'disconnected', 
-        message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้' 
+        message: `เกิดข้อผิดพลาด: ${error.message}` 
       };
     }
   }
@@ -107,22 +158,22 @@ export class YahooFinanceService {
   // Get comprehensive list of stock symbols
   static getSET100Symbols(): string[] {
     return [
-      'ADVANC', 'AEONTS', 'AMATA', 'ANAN', 'AOT', 'AP', 'AWC', 'BANPU', 'BBL', 'BCPG',
-      'BDMS', 'BEAUTY', 'BEC', 'BGRIM', 'BH', 'BJC', 'BLA', 'BPP', 'BTS', 'BYD',
-      'CBG', 'CENTEL', 'CHG', 'CK', 'CKP', 'COM7', 'CPALL', 'CPF', 'CPN', 'CRC',
-      'DELTA', 'DOHOME', 'DTAC', 'EA', 'EGCO', 'EPG', 'ERW', 'ESSO', 'GFPT', 'GLOBAL',
-      'GPSC', 'GULF', 'GUNKUL', 'HANA', 'HMPRO', 'HUMAN', 'ICHI', 'IVL', 'JAS', 'JMART',
-      'JMT', 'KBANK', 'KCE', 'KKP', 'KTC', 'KTB', 'LH', 'MAJOR', 'MAKRO', 'MALEE',
-      'MEGA', 'MINT', 'MTC', 'NRF', 'OR', 'OSP', 'PLANB', 'PRM', 'PSH', 'PSL',
-      'PTG', 'PTT', 'PTTEP', 'PTTGC', 'QH', 'RATCH', 'RBF', 'RS', 'SAWAD', 'SCC',
-      'SCB', 'SCGP', 'SINGER', 'SPALI', 'STA', 'STEC', 'SUPER', 'TASCO', 'TCAP', 'THANI',
-      'TISCO', 'TKN', 'TMB', 'TOP', 'TQM', 'TRUE', 'TTB', 'TU', 'TVO', 'WHA'
-    ].map(symbol => `${symbol}.BK`);
+      'ADVANC.BK', 'AEONTS.BK', 'AMATA.BK', 'ANAN.BK', 'AOT.BK', 'AP.BK', 'AWC.BK', 'BANPU.BK', 'BBL.BK', 'BCPG.BK',
+      'BDMS.BK', 'BEAUTY.BK', 'BEC.BK', 'BGRIM.BK', 'BH.BK', 'BJC.BK', 'BLA.BK', 'BPP.BK', 'BTS.BK', 'BYD.BK',
+      'CBG.BK', 'CENTEL.BK', 'CHG.BK', 'CK.BK', 'CKP.BK', 'COM7.BK', 'CPALL.BK', 'CPF.BK', 'CPN.BK', 'CRC.BK',
+      'DELTA.BK', 'DOHOME.BK', 'EA.BK', 'EGCO.BK', 'EPG.BK', 'ERW.BK', 'GFPT.BK', 'GLOBAL.BK',
+      'GPSC.BK', 'GULF.BK', 'GUNKUL.BK', 'HANA.BK', 'HMPRO.BK', 'HUMAN.BK', 'ICHI.BK', 'IVL.BK', 'JAS.BK', 'JMART.BK',
+      'JMT.BK', 'KBANK.BK', 'KCE.BK', 'KKP.BK', 'KTC.BK', 'KTB.BK', 'LH.BK', 'MAJOR.BK', 'MAKRO.BK', 'MALEE.BK',
+      'MEGA.BK', 'MINT.BK', 'MTC.BK', 'NRF.BK', 'OR.BK', 'OSP.BK', 'PLANB.BK', 'PRM.BK', 'PSH.BK', 'PSL.BK',
+      'PTG.BK', 'PTT.BK', 'PTTEP.BK', 'PTTGC.BK', 'QH.BK', 'RATCH.BK', 'RBF.BK', 'RS.BK', 'SAWAD.BK', 'SCC.BK',
+      'SCB.BK', 'SCGP.BK', 'SINGER.BK', 'SPALI.BK', 'STA.BK', 'STEC.BK', 'SUPER.BK', 'TASCO.BK', 'TCAP.BK', 'THANI.BK',
+      'TISCO.BK', 'TKN.BK', 'TMB.BK', 'TOP.BK', 'TQM.BK', 'TRUE.BK', 'TTB.BK', 'TU.BK', 'TVO.BK', 'WHA.BK'
+    ];
   }
 
   static getUSStockSymbols(): string[] {
     return [
-      'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'BRK.A', 'BRK.B',
+      'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'BRK-A', 'BRK-B',
       'UNH', 'JNJ', 'JPM', 'V', 'PG', 'HD', 'MA', 'DIS', 'PYPL', 'ADBE', 'CRM', 'NFLX',
       'CMCSA', 'PEP', 'NKE', 'TMO', 'ABT', 'COST', 'AVGO', 'TXN', 'LLY', 'WMT', 'ORCL',
       'ACN', 'MDT', 'NEE', 'DHR', 'VZ', 'MRK', 'KO', 'PFE', 'INTC', 'T', 'IBM', 'CSCO',
@@ -140,69 +191,6 @@ export class YahooFinanceService {
     return allSymbols.filter(symbol => 
       symbol.toLowerCase().includes(query.toLowerCase())
     ).slice(0, 20);
-  }
-
-  // Calculate DCA Score based on Warren Buffett principles
-  static calculateDCAScore(stock: StockData): number {
-    let score = 0;
-    
-    // 1. ROE > 15%
-    if (stock.roe && stock.roe > 0.15) score += 1;
-    
-    // 2. Debt to Equity < 1
-    if (stock.debtToEquity && stock.debtToEquity < 1) score += 1;
-    
-    // 3. Profit Margin > 10%
-    if (stock.profitMargin && stock.profitMargin > 0.1) score += 1;
-    
-    // 4. P/E Ratio < 20 (reasonable valuation)
-    if (stock.pe && stock.pe < 20 && stock.pe > 0) score += 1;
-    
-    // 5. Dividend Yield > 2%
-    if (stock.dividendYield && stock.dividendYield > 0.02) score += 1;
-    
-    // 6. Market Cap > 1B (established company)
-    if (stock.marketCap && stock.marketCap > 1000000000) score += 1;
-    
-    // 7. Positive earnings (EPS > 0)
-    if (stock.eps && stock.eps > 0) score += 1;
-    
-    // 8. Stock price not at 52-week high (good entry point)
-    if (stock.weekHigh52 && stock.price < stock.weekHigh52 * 0.9) score += 1;
-    
-    return score;
-  }
-
-  static getDCARecommendation(score: number): { 
-    level: 'excellent' | 'good' | 'moderate' | 'poor'; 
-    message: string; 
-    color: string; 
-  } {
-    if (score >= 7) {
-      return {
-        level: 'excellent',
-        message: 'แนะนำให้ DCA อย่างมาก - หุ้นมีคุณภาพสูง',
-        color: 'text-green-600'
-      };
-    } else if (score >= 5) {
-      return {
-        level: 'good',
-        message: 'เหมาะสำหรับ DCA - หุ้นมีคุณภาพดี',
-        color: 'text-blue-600'
-      };
-    } else if (score >= 3) {
-      return {
-        level: 'moderate',
-        message: 'พิจารณา DCA ด้วยความระมัดระวัง',
-        color: 'text-yellow-600'
-      };
-    } else {
-      return {
-        level: 'poor',
-        message: 'ไม่แนะนำให้ DCA - ควรศึกษาเพิ่มเติม',
-        color: 'text-red-600'
-      };
-    }
   }
 
   // Utility methods for formatting
@@ -232,27 +220,5 @@ export class YahooFinanceService {
 
   static formatPercentage(value: number): string {
     return `${(value * 100).toFixed(2)}%`;
-  }
-
-  static async getHistoricalData(symbol: string, period: string = '1mo', interval: string = '1d'): Promise<any[]> {
-    try {
-      const response = await fetch('/api/stock-historical', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ symbol, period, interval }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch historical data');
-      }
-
-      const data = await response.json();
-      return data.historical || [];
-    } catch (error) {
-      console.error('Error fetching historical data:', error);
-      return [];
-    }
   }
 }

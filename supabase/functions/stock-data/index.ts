@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.53.0'
 
@@ -9,8 +10,10 @@ const corsHeaders = {
 // Yahoo Finance API function with proper error handling
 async function fetchYahooFinanceData(symbol: string) {
   try {
-    // Use the chart API endpoint for real-time data
-    const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+    console.log(`Fetching data for ${symbol} from Yahoo Finance`);
+    
+    // Use the quote API endpoint for real-time data
+    const response = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json',
@@ -18,66 +21,52 @@ async function fetchYahooFinanceData(symbol: string) {
     });
     
     if (!response.ok) {
+      console.error(`HTTP error for ${symbol}! status: ${response.status}`);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
     const data = await response.json();
     
-    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-      throw new Error('Invalid response format from Yahoo Finance');
+    if (!data.quoteResponse || !data.quoteResponse.result || data.quoteResponse.result.length === 0) {
+      console.error(`No data found for ${symbol}`);
+      throw new Error('No quote data found');
     }
 
-    const result = data.chart.result[0];
-    const meta = result.meta;
-    const quote = result.indicators?.quote?.[0];
+    const quote = data.quoteResponse.result[0];
     
-    // Extract the latest data point
-    const latestIndex = quote?.close?.length - 1 || 0;
-    const currentPrice = meta.regularMarketPrice || quote?.close?.[latestIndex] || 0;
-    const previousClose = meta.previousClose || meta.chartPreviousClose || 0;
+    // Extract relevant data
+    const currentPrice = quote.regularMarketPrice || 0;
+    const previousClose = quote.regularMarketPreviousClose || 0;
     const change = currentPrice - previousClose;
     const changePercent = previousClose ? (change / previousClose) * 100 : 0;
 
+    console.log(`Successfully fetched data for ${symbol}: price=${currentPrice}`);
+
     return {
-      symbol: meta.symbol,
-      shortName: meta.shortName || symbol,
-      longName: meta.longName || meta.shortName || symbol,
-      regularMarketPrice: currentPrice,
-      regularMarketPreviousClose: previousClose,
-      regularMarketOpen: meta.regularMarketOpen || currentPrice,
-      regularMarketDayHigh: meta.regularMarketDayHigh || currentPrice,
-      regularMarketDayLow: meta.regularMarketDayLow || currentPrice,
-      regularMarketVolume: quote?.volume?.[latestIndex] || meta.regularMarketVolume || 0,
-      marketCap: meta.marketCap || 0,
-      trailingPE: meta.trailingPE || 0,
-      trailingEps: meta.epsTrailingTwelveMonths || 0,
-      dividendYield: meta.dividendYield || 0,
-      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || 0,
-      fiftyTwoWeekLow: meta.fiftyTwoWeekLow || 0,
-      currency: meta.currency || 'USD',
-      exchange: meta.exchangeName || meta.market || 'UNKNOWN',
+      symbol: quote.symbol,
+      name: quote.displayName || quote.shortName || quote.longName || symbol,
+      price: currentPrice,
+      current_price: currentPrice,
+      change: change,
+      changePercent: changePercent,
+      market: determineMarket(quote.symbol, quote.market),
+      currency: quote.currency || (quote.symbol.includes('.BK') ? 'THB' : 'USD'),
+      marketCap: quote.marketCap || 0,
+      pe: quote.trailingPE || 0,
+      eps: quote.epsTrailingTwelveMonths || 0,
+      dividendYield: quote.dividendYield || 0,
+      weekHigh52: quote.fiftyTwoWeekHigh || 0,
+      weekLow52: quote.fiftyTwoWeekLow || 0,
+      volume: quote.regularMarketVolume || 0,
+      open: quote.regularMarketOpen || currentPrice,
+      dayHigh: quote.regularMarketDayHigh || currentPrice,
+      dayLow: quote.regularMarketDayLow || currentPrice,
       success: true
     };
   } catch (error) {
     console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error);
     throw error;
   }
-}
-
-// Enhanced sample data with Warren Buffett analysis metrics
-function generateErrorResponse(symbols: string[], errorMsg: string) {
-  return symbols.map(symbol => ({
-    symbol,
-    error: errorMsg,
-    success: false,
-    isSampleData: false,
-    company_name: `Error fetching ${symbol}`,
-    market: 'UNKNOWN',
-    current_price: 0,
-    change: 0,
-    changePercent: 0,
-    currency: 'USD'
-  }));
 }
 
 function determineMarket(symbol: string, exchange?: string): string {
@@ -96,26 +85,23 @@ function determineMarket(symbol: string, exchange?: string): string {
   return symbol.includes('.BK') ? 'SET' : 'NASDAQ';
 }
 
-function mapSector(exchange?: string, symbol?: string): string {
-  if (exchange === 'SET' || symbol?.includes('.BK')) {
-    const thaiSymbol = symbol?.replace('.BK', '') || '';
-    if (['BBL', 'KBANK', 'KTB', 'SCB', 'TTB'].includes(thaiSymbol)) {
+function mapSector(symbol: string): string {
+  if (symbol.includes('.BK')) {
+    const thaiSymbol = symbol.replace('.BK', '');
+    if (['BBL', 'KBANK', 'KTB', 'SCB', 'TTB', 'TCAP', 'TISCO', 'KKP'].includes(thaiSymbol)) {
       return 'Banking';
     }
-    if (['ADVANC', 'INTUCH', 'TRUE'].includes(thaiSymbol)) {
+    if (['ADVANC', 'TRUE', 'DTAC'].includes(thaiSymbol)) {
       return 'Technology';
     }
-    if (['CPALL', 'MAKRO', 'BJC'].includes(thaiSymbol)) {
+    if (['CPALL', 'MAKRO', 'BJC', 'COM7'].includes(thaiSymbol)) {
       return 'Commerce';
     }
-    if (['PTTEP', 'PTT', 'TOP', 'BANPU'].includes(thaiSymbol)) {
+    if (['PTTEP', 'PTT', 'TOP', 'BANPU', 'GULF', 'BGRIM'].includes(thaiSymbol)) {
       return 'Energy & Utilities';
     }
-    if (['AOT', 'MINT', 'ERAWAN'].includes(thaiSymbol)) {
-      return 'Tourism & Leisure';
-    }
+    return 'Industrial';
   }
-  
   return 'Technology';
 }
 
@@ -138,30 +124,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Fetching data for symbols:', symbols);
+    console.log(`Processing request for ${symbols.length} symbols:`, symbols.slice(0, 5));
 
     const stockQuotes = [];
-    let failedSymbols = [];
+    const failedSymbols = [];
     
-    for (const symbol of symbols) {
+    // Process symbols in batches to avoid rate limiting
+    for (const symbol of symbols.slice(0, 50)) { // Limit to 50 symbols
       const cleanSymbol = symbol.trim();
       
       try {
-        console.log(`Attempting to fetch real data for ${cleanSymbol}`);
         const realData = await fetchYahooFinanceData(cleanSymbol);
         stockQuotes.push(realData);
-        console.log(`Successfully fetched real data for ${cleanSymbol}`);
       } catch (error) {
-        console.error(`Error fetching Yahoo Finance data for ${cleanSymbol}:`, error);
+        console.error(`Failed to fetch data for ${cleanSymbol}:`, error.message);
         failedSymbols.push(cleanSymbol);
       }
+      
+      // Add small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     
     if (stockQuotes.length === 0) {
       return new Response(
         JSON.stringify({ 
-          error: 'Yahoo Finance API unavailable',
-          message: `ไม่สามารถดึงข้อมูลจาก Yahoo Finance ได้สำหรับ: ${failedSymbols.join(', ')}`,
+          error: 'No data could be retrieved',
+          message: `ไม่สามารถดึงข้อมูลได้สำหรับ: ${failedSymbols.join(', ')}`,
           failedSymbols,
           success: false,
           data: []
@@ -173,27 +161,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    // เชื่อมต่อ Supabase และอัพเดทข้อมูล
+    // Connect to Supabase and update database
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Update stock_markets table
     const updatePromises = stockQuotes.map(async (quote) => {
       const stockData = {
         symbol: quote.symbol,
-        company_name: quote.longName || quote.shortName || quote.symbol,
-        market: determineMarket(quote.symbol, quote.exchange),
-        sector: mapSector(quote.exchange, quote.symbol),
-        current_price: quote.regularMarketPrice,
-        previous_close: quote.regularMarketPreviousClose,
-        open_price: quote.regularMarketOpen,
-        day_high: quote.regularMarketDayHigh,
-        day_low: quote.regularMarketDayLow,
-        volume: quote.regularMarketVolume,
+        company_name: quote.name,
+        market: quote.market,
+        sector: mapSector(quote.symbol),
+        current_price: quote.price,
+        previous_close: quote.price - quote.change,
+        open_price: quote.open,
+        day_high: quote.dayHigh,
+        day_low: quote.dayLow,
+        volume: quote.volume,
         market_cap: quote.marketCap,
-        pe_ratio: quote.trailingPE,
-        eps: quote.trailingEps,
-        dividend_yield: quote.dividendYield ? quote.dividendYield * 100 : null,
+        pe_ratio: quote.pe,
+        eps: quote.eps,
+        dividend_yield: quote.dividendYield,
         last_updated: new Date().toISOString()
       };
 
@@ -208,29 +197,18 @@ Deno.serve(async (req) => {
         console.error(`Error updating ${quote.symbol}:`, error);
       }
 
-      return {
-        ...stockData,
-        change: quote.regularMarketPrice - quote.regularMarketPreviousClose,
-        changePercent: quote.regularMarketPreviousClose ? 
-          ((quote.regularMarketPrice - quote.regularMarketPreviousClose) / quote.regularMarketPreviousClose) * 100 : 0,
-        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
-        fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
-        currency: quote.currency,
-        success: quote.success || false,
-        isSampleData: quote.isSampleData || false
-      };
+      return stockData;
     });
 
     const updatedData = await Promise.all(updatePromises);
 
-    console.log(`Successfully processed ${updatedData.length} stocks`);
+    console.log(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         data: updatedData,
         failedSymbols,
-        yahooApiStatus: 'connected',
         totalRequested: symbols.length,
         totalSuccessful: stockQuotes.length,
         totalFailed: failedSymbols.length,
@@ -244,14 +222,13 @@ Deno.serve(async (req) => {
     
     return new Response(
       JSON.stringify({ 
-        error: 'Yahoo Finance API Error',
-        message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้',
+        error: 'Internal server error',
+        message: 'เกิดข้อผิดพลาดในการดึงข้อมูล',
         details: error.message,
-        success: false,
-        yahooApiStatus: 'disconnected'
+        success: false
       }),
       { 
-        status: 503,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

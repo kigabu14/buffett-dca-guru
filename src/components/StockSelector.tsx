@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown } from 'lucide-react';
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -25,22 +26,22 @@ interface StockSelectorProps {
   placeholder?: string;
 }
 
-// รายชื่อหุ้นยอดนิยม - เพิ่มหุ้นไทยและสหรัฐให้ครบถ้วน
+// Popular Thai and US stocks
 const popularStocks = {
   thai: [
-    'ADVANC', 'AEONTS', 'AMATA', 'ANAN', 'AOT', 'AP', 'AWC', 'BANPU', 'BBL', 'BCPG',
-    'BDMS', 'BEAUTY', 'BEC', 'BGRIM', 'BH', 'BJC', 'BLA', 'BPP', 'BTS', 'BYD',
-    'CBG', 'CENTEL', 'CHG', 'CK', 'CKP', 'COM7', 'CPALL', 'CPF', 'CPN', 'CRC',
-    'DELTA', 'DOHOME', 'DTAC', 'EA', 'EGCO', 'EPG', 'ERW', 'ESSO', 'GFPT', 'GLOBAL',
-    'GPSC', 'GULF', 'GUNKUL', 'HANA', 'HMPRO', 'HUMAN', 'ICHI', 'IVL', 'JAS', 'JMART',
-    'JMT', 'KBANK', 'KCE', 'KKP', 'KTC', 'KTB', 'LH', 'MAJOR', 'MAKRO', 'MALEE',
-    'MEGA', 'MINT', 'MTC', 'NRF', 'OR', 'OSP', 'PLANB', 'PRM', 'PSH', 'PSL',
-    'PTG', 'PTT', 'PTTEP', 'PTTGC', 'QH', 'RATCH', 'RBF', 'RS', 'SAWAD', 'SCC',
-    'SCB', 'SCGP', 'SINGER', 'SPALI', 'STA', 'STEC', 'SUPER', 'TASCO', 'TCAP', 'THANI',
-    'TISCO', 'TKN', 'TMB', 'TOP', 'TQM', 'TRUE', 'TTB', 'TU', 'TVO', 'WHA'
+    'ADVANC.BK', 'AEONTS.BK', 'AMATA.BK', 'ANAN.BK', 'AOT.BK', 'AP.BK', 'AWC.BK', 'BANPU.BK', 'BBL.BK', 'BCPG.BK',
+    'BDMS.BK', 'BEAUTY.BK', 'BEC.BK', 'BGRIM.BK', 'BH.BK', 'BJC.BK', 'BLA.BK', 'BPP.BK', 'BTS.BK', 'BYD.BK',
+    'CBG.BK', 'CENTEL.BK', 'CHG.BK', 'CK.BK', 'CKP.BK', 'COM7.BK', 'CPALL.BK', 'CPF.BK', 'CPN.BK', 'CRC.BK',
+    'DELTA.BK', 'DOHOME.BK', 'EA.BK', 'EGCO.BK', 'EPG.BK', 'ERW.BK', 'GFPT.BK', 'GLOBAL.BK',
+    'GPSC.BK', 'GULF.BK', 'GUNKUL.BK', 'HANA.BK', 'HMPRO.BK', 'HUMAN.BK', 'ICHI.BK', 'IVL.BK', 'JAS.BK', 'JMART.BK',
+    'JMT.BK', 'KBANK.BK', 'KCE.BK', 'KKP.BK', 'KTC.BK', 'KTB.BK', 'LH.BK', 'MAJOR.BK', 'MAKRO.BK', 'MALEE.BK',
+    'MEGA.BK', 'MINT.BK', 'MTC.BK', 'NRF.BK', 'OR.BK', 'OSP.BK', 'PLANB.BK', 'PRM.BK', 'PSH.BK', 'PSL.BK',
+    'PTG.BK', 'PTT.BK', 'PTTEP.BK', 'PTTGC.BK', 'QH.BK', 'RATCH.BK', 'RBF.BK', 'RS.BK', 'SAWAD.BK', 'SCC.BK',
+    'SCB.BK', 'SCGP.BK', 'SINGER.BK', 'SPALI.BK', 'STA.BK', 'STEC.BK', 'SUPER.BK', 'TASCO.BK', 'TCAP.BK', 'THANI.BK',
+    'TISCO.BK', 'TKN.BK', 'TMB.BK', 'TOP.BK', 'TQM.BK', 'TRUE.BK', 'TTB.BK', 'TU.BK', 'TVO.BK', 'WHA.BK'
   ],
   us: [
-    'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'BRK.A', 'BRK.B',
+    'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'BRK-A', 'BRK-B',
     'UNH', 'JNJ', 'JPM', 'V', 'PG', 'HD', 'MA', 'DIS', 'PYPL', 'ADBE', 'CRM', 'NFLX',
     'CMCSA', 'PEP', 'NKE', 'TMO', 'ABT', 'COST', 'AVGO', 'TXN', 'LLY', 'WMT', 'ORCL',
     'ACN', 'MDT', 'NEE', 'DHR', 'VZ', 'MRK', 'KO', 'PFE', 'INTC', 'T', 'IBM', 'CSCO',
@@ -61,64 +62,45 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
   const [loading, setLoading] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
-  // สร้างรายการหุ้นจากข้อมูลที่มี
+  // Load stocks from both Thai and US markets
   useEffect(() => {
     const loadStocks = async () => {
       setLoading(true);
       try {
-        // โหลดหุ้นไทยและสหรัฐที่นิยม
-        const allSymbols = [
-          ...popularStocks.thai.map(s => `${s}.BK`),
-          ...popularStocks.us
-        ];
+        const allSymbols = [...popularStocks.thai, ...popularStocks.us];
 
-        console.log('Loading stocks:', allSymbols.slice(0, 10)); // Debug log
+        console.log('Loading stocks from Yahoo Finance:', allSymbols.length, 'symbols');
 
-        // ดึงข้อมูลจาก stock-data function
+        // Fetch data from stock-data function
         const { data, error } = await supabase.functions.invoke('stock-data', {
-          body: { symbols: allSymbols.slice(0, 100) } // จำกัดที่ 100 ตัวเพื่อประสิทธิภาพ
+          body: { symbols: allSymbols.slice(0, 100) } // Process first 100 stocks
         });
 
         if (error) {
           console.error('Error fetching stock data:', error);
-          // ใช้ข้อมูลเริ่มต้น
-          const defaultStocks = allSymbols.slice(0, 40).map(symbol => ({
-            symbol,
-            name: symbol.replace('.BK', ''),
-            price: Math.random() * 200 + 50,
-            change: (Math.random() - 0.5) * 10,
-            changePercent: (Math.random() - 0.5) * 5,
-            market: symbol.includes('.BK') ? 'SET' : 'NASDAQ',
-            currency: symbol.includes('.BK') ? 'THB' : 'USD'
-          }));
-          setStocks(defaultStocks);
-        } else if (data?.data) {
-          console.log('Stock data received:', data.data.length, 'stocks');
+          throw error;
+        }
+
+        if (data?.data && data.data.length > 0) {
+          console.log('Successfully loaded', data.data.length, 'stocks');
           const stockOptions = data.data.map((stock: any) => ({
             symbol: stock.symbol,
-            name: stock.name || stock.symbol.replace('.BK', ''),
-            price: stock.price || 0,
-            change: stock.change || 0,
-            changePercent: stock.changePercent || 0,
+            name: stock.company_name || stock.name || stock.symbol,
+            price: stock.current_price || stock.price || 0,
+            change: stock.current_price ? stock.current_price - (stock.previous_close || 0) : 0,
+            changePercent: stock.previous_close ? 
+              ((stock.current_price - stock.previous_close) / stock.previous_close) * 100 : 0,
             market: stock.market || (stock.symbol.includes('.BK') ? 'SET' : 'NASDAQ'),
-            currency: stock.currency || (stock.symbol.includes('.BK') ? 'THB' : 'USD')
+            currency: stock.symbol.includes('.BK') ? 'THB' : 'USD'
           }));
           setStocks(stockOptions);
         } else {
-          // Fallback data
-          const fallbackStocks = allSymbols.slice(0, 40).map(symbol => ({
-            symbol,
-            name: symbol.replace('.BK', ''),
-            price: Math.random() * 200 + 50,
-            change: (Math.random() - 0.5) * 10,
-            changePercent: (Math.random() - 0.5) * 5,
-            market: symbol.includes('.BK') ? 'SET' : 'NASDAQ',
-            currency: symbol.includes('.BK') ? 'THB' : 'USD'
-          }));
-          setStocks(fallbackStocks);
+          console.warn('No stock data received');
+          setStocks([]);
         }
       } catch (error) {
         console.error('Error loading stocks:', error);
+        setStocks([]);
       } finally {
         setLoading(false);
       }
@@ -127,7 +109,7 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
     loadStocks();
   }, []);
 
-  // อัพเดทราคาปัจจุบันเมื่อเลือกหุ้น
+  // Update current price when stock is selected
   useEffect(() => {
     if (value) {
       const selectedStock = stocks.find(stock => stock.symbol === value);
@@ -138,7 +120,7 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
     }
   }, [value, stocks, onStockSelect]);
 
-  // กรองหุ้นตามคำค้นหา
+  // Filter stocks based on search
   const filteredStocks = stocks.filter(stock => {
     const searchTerm = searchValue.toLowerCase();
     return (
@@ -191,7 +173,10 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
                 </div>
               </div>
             ) : (
-              placeholder
+              <div className="flex items-center">
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {placeholder}
+              </div>
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -207,11 +192,11 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
               {loading ? 'กำลังโหลด...' : 'ไม่พบหุ้นที่ค้นหา'}
             </CommandEmpty>
             
-            {/* หุ้นไทย */}
+            {/* Thai stocks */}
             <CommandGroup heading="หุ้นไทย (SET)">
               {filteredStocks
                 .filter(stock => stock.symbol.includes('.BK'))
-                .slice(0, 10)
+                .slice(0, 15)
                 .map((stock) => (
                   <CommandItem
                     key={stock.symbol}
@@ -252,11 +237,11 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
                 ))}
             </CommandGroup>
 
-            {/* หุ้นสหรัฐ */}
+            {/* US stocks */}
             <CommandGroup heading="หุ้นสหรัฐ (US)">
               {filteredStocks
                 .filter(stock => !stock.symbol.includes('.BK'))
-                .slice(0, 10)
+                .slice(0, 15)
                 .map((stock) => (
                   <CommandItem
                     key={stock.symbol}
@@ -300,7 +285,7 @@ export const StockSelector: React.FC<StockSelectorProps> = ({
         </PopoverContent>
       </Popover>
 
-      {/* แสดงราคาปัจจุบันด้านล่าง */}
+      {/* Current price display */}
       {currentPrice !== null && selectedStock && (
         <div className="p-3 rounded-lg bg-muted/30 border border-border/20">
           <div className="flex items-center justify-between">
