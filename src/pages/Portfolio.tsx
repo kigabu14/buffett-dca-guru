@@ -186,9 +186,17 @@ const Portfolio = () => {
       fetchInvestments();
     } catch (error) {
       console.error('Error saving investment:', error);
+      let errorMessage = 'ไม่สามารถเพิ่มการลงทุนได้';
+      
+      if (error.message) {
+        errorMessage = error.message.includes('violates row-level security policy') 
+          ? 'ไม่มีสิทธิ์เพิ่มการลงทุน กรุณาล็อกอินใหม่' 
+          : `เกิดข้อผิดพลาด: ${error.message}`;
+      }
+      
       toast({
         title: "เกิดข้อผิดพลาด",
-        description: editingInvestment ? "ไม่สามารถแก้ไขการลงทุนได้" : "ไม่สามารถเพิ่มการลงทุนได้",
+        description: editingInvestment ? "ไม่สามารถแก้ไขการลงทุนได้" : errorMessage,
         variant: "destructive"
       });
     }

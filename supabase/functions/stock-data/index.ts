@@ -101,7 +101,7 @@ function parseYahooData(data: any, originalSymbol: string, cleanSymbol: string) 
 
     // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
+    const market = isThaiStock ? 'SET' : 'NASDAQ';
     const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
 
     // Get latest quote data
