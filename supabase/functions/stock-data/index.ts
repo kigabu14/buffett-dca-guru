@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Update stock_markets table
+    // Update stock_markets table (removed fields that don't exist in the table)
     const updatePromises = stockQuotes.map(async (quote) => {
       const stockData = {
         symbol: quote.symbol,
@@ -305,14 +305,6 @@ Deno.serve(async (req) => {
         pe_ratio: quote.pe,
         eps: quote.eps,
         dividend_yield: quote.dividendYield,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: quote.exDividendDate,
-        dividend_date: quote.dividendDate,
-        roe: quote.roe,
-        debt_to_equity: quote.debtToEquity,
-        profit_margin: quote.profitMargin,
-        operating_margin: quote.operatingMargin,
-        current_ratio: quote.currentRatio,
         last_updated: new Date().toISOString()
       };
 

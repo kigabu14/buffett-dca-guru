@@ -41,7 +41,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
     setResults(null); // Clear previous results
   };
 
-  const calculateDCA = () => {
+  const calculateDCA = async () => {
     const stockToUse = selectedStock || (symbol && currentPrice ? {
       symbol,
       price: currentPrice,
@@ -60,25 +60,45 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       const totalPeriods = frequency === 'weekly' ? Math.floor(months * 4.33) : 
                           frequency === 'monthly' ? months : months * 30;
 
-      // Simulate price volatility (simplified model)
+      // Get historical data for more accurate simulation
+      let historicalPrices: number[] = [];
+      try {
+        const historicalData = await YahooFinanceService.getHistoricalData(stockToUse.symbol, '1y');
+        if (historicalData && historicalData.length > 0) {
+          // Use actual historical prices for the simulation
+          historicalPrices = historicalData.map(d => d.price).slice(-totalPeriods);
+        }
+      } catch (error) {
+        console.warn('Could not fetch historical data, using simulated prices:', error);
+      }
+
       let totalShares = 0;
       let totalInvested = 0;
       let totalDividends = 0;
       
       for (let i = 0; i < totalPeriods; i++) {
-        // Simulate price with some volatility (random walk)
-        const volatility = 0.02; // 2% volatility per period
-        const randomFactor = 1 + (Math.random() - 0.5) * volatility;
-        const simulatedPrice = stockToUse.price * randomFactor * (1 + (i / totalPeriods) * 0.05); // slight upward trend
+        let price: number;
         
-        const shares = investmentAmount / simulatedPrice;
+        if (historicalPrices.length > i) {
+          // Use actual historical price
+          price = historicalPrices[i];
+        } else {
+          // Fallback to simulation with realistic volatility
+          const volatility = 0.015; // 1.5% volatility per period (more realistic)
+          const randomFactor = 1 + (Math.random() - 0.5) * volatility * 2;
+          const trendFactor = 1 + (Math.random() * 0.001); // very small random trend
+          price = stockToUse.price * randomFactor * trendFactor;
+        }
+        
+        const shares = investmentAmount / price;
         totalShares += shares;
         totalInvested += investmentAmount;
         
-        // Calculate dividends (quarterly payments)
-        if (stockToUse.dividendYield && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
-          const quarterlyDividendRate = stockToUse.dividendYield / 4;
-          totalDividends += totalShares * stockToUse.price * quarterlyDividendRate;
+        // Calculate dividends (quarterly payments) - more accurate calculation
+        if (stockToUse.dividendYield && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
+          const quarterlyDividendRate = (stockToUse.dividendYield / 100) / 4; // Convert percentage to decimal
+          const currentSharesForDividend = totalShares; // Total shares at this point
+          totalDividends += currentSharesForDividend * price * quarterlyDividendRate;
         }
       }
 

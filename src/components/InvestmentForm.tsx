@@ -106,7 +106,14 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('Form submission started:', { formData });
+    
     if (!formData.symbol || !formData.quantity || !formData.buy_price) {
+      console.error('Missing required fields:', { 
+        symbol: formData.symbol, 
+        quantity: formData.quantity, 
+        buy_price: formData.buy_price 
+      });
       return;
     }
 
@@ -132,6 +139,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
       dividend_yield_at_purchase: null
     };
 
+    console.log('Investment data prepared:', investmentData);
     onSubmit(investmentData);
   };
 
