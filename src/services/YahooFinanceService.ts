@@ -47,11 +47,11 @@ export class YahooFinanceService {
       if (data?.data && data.data.length > 0) {
         return data.data[0];
       } else {
-        return this.generateSampleStock(symbol);
+        throw new Error(`ไม่สามารถดึงข้อมูลหุ้น ${symbol} ได้จาก Yahoo Finance`);
       }
     } catch (error) {
       console.error(`Error fetching stock ${symbol}:`, error);
-      return this.generateSampleStock(symbol);
+      throw error;
     }
   }
 
@@ -70,41 +70,38 @@ export class YahooFinanceService {
       if (data?.data && data.data.length > 0) {
         return data.data;
       } else {
-        return symbols.map(symbol => this.generateSampleStock(symbol));
+        throw new Error(`ไม่สามารถดึงข้อมูลหุ้นได้จาก Yahoo Finance`);
       }
     } catch (error) {
       console.error('Error fetching stocks:', error);
-      return symbols.map(symbol => this.generateSampleStock(symbol));
+      throw error;
     }
   }
 
-  // Generate sample stock data for fallback
-  static generateSampleStock(symbol: string): StockData {
-    const isThaiStock = symbol.includes('.BK');
-    const basePrice = isThaiStock ? Math.random() * 100 + 20 : Math.random() * 300 + 50;
-    const change = (Math.random() - 0.5) * 10;
-    const changePercent = (change / basePrice) * 100;
+  // Check Yahoo Finance API status
+  static async checkApiStatus(): Promise<{ status: 'connected' | 'disconnected', message: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('stock-data', {
+        body: { symbols: ['AAPL'] } // Test with a simple US stock
+      });
 
-    return {
-      symbol,
-      name: isThaiStock ? symbol.replace('.BK', ' บริษัท') : `${symbol} Corporation`,
-      market: isThaiStock ? 'SET' : 'NASDAQ',
-      currency: isThaiStock ? 'THB' : 'USD',
-      price: Math.round(basePrice * 100) / 100,
-      change: Math.round(change * 100) / 100,
-      changePercent: Math.round(changePercent * 100) / 100,
-      marketCap: Math.random() * 1000000000000,
-      pe: Math.random() * 30 + 5,
-      eps: Math.random() * 20,
-      dividendYield: Math.random() * 0.05,
-      weekHigh52: basePrice * (1 + Math.random() * 0.3),
-      weekLow52: basePrice * (1 - Math.random() * 0.3),
-      volume: Math.floor(Math.random() * 10000000),
-      roe: Math.random() * 0.25,
-      debtToEquity: Math.random() * 2,
-      profitMargin: Math.random() * 0.3,
-      isSampleData: true
-    };
+      if (error) {
+        return { 
+          status: 'disconnected', 
+          message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้' 
+        };
+      }
+
+      return { 
+        status: 'connected', 
+        message: 'เชื่อมต่อกับ Yahoo Finance API สำเร็จ' 
+      };
+    } catch (error) {
+      return { 
+        status: 'disconnected', 
+        message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้' 
+      };
+    }
   }
 
   // Get comprehensive list of stock symbols

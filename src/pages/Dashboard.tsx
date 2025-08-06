@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { YahooFinanceService, StockData } from "@/services/YahooFinanceService";
 import { RealTimeStockPrice } from "@/components/RealTimeStockPrice";
 import { DCASimulator } from "@/components/DCASimulator";
+import { YahooFinanceStatus } from "@/components/YahooFinanceStatus";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
@@ -59,21 +60,16 @@ const Dashboard = () => {
       setStockData(stocks);
       setLastUpdate(new Date());
       
-      const realDataCount = stocks.filter(s => !s.isSampleData).length;
-      const sampleDataCount = stocks.filter(s => s.isSampleData).length;
-      
-      if (sampleDataCount > 0) {
-        toast({
-          title: "ข้อมูลบางส่วนจาก Yahoo Finance",
-          description: `ดึงข้อมูลจริง ${realDataCount} หุ้น, ข้อมูลตัวอย่าง ${sampleDataCount} หุ้น`,
-          variant: "default"
-        });
-      }
+      toast({
+        title: "อัพเดทข้อมูลสำเร็จ",
+        description: `ดึงข้อมูลหุ้น ${stocks.length} ตัวจาก Yahoo Finance`,
+      });
     } catch (error) {
       console.error('Error fetching stock data:', error);
+      setStockData([]);
       toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถดึงข้อมูลหุ้นได้",
+        title: "ไม่สามารถดึงข้อมูลหุ้นได้",
+        description: "กรุณาตรวจสอบการเชื่อมต่อและลองใหม่อีกครั้ง",
         variant: "destructive"
       });
     } finally {
@@ -104,6 +100,8 @@ const Dashboard = () => {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Yahoo Finance Status */}
+      <YahooFinanceStatus />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -295,13 +293,9 @@ const Dashboard = () => {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        {stock.isSampleData ? (
-                          <Badge variant="secondary">ตัวอย่าง</Badge>
-                        ) : (
-                          <Badge variant="default" className="bg-green-100 text-green-800">
-                            จริง
-                          </Badge>
-                        )}
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          เรียลไทม์
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   );

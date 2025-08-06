@@ -65,57 +65,19 @@ async function fetchYahooFinanceData(symbol: string) {
 }
 
 // Enhanced sample data with Warren Buffett analysis metrics
-function getSampleStockData(symbol: string) {
-  const basePrice = Math.random() * 1000 + 50;
-  const change = (Math.random() - 0.5) * 20;
-  const changePercent = (change / basePrice) * 100;
-  
-  const sampleData = {
-    // Thai stocks (SET100)
-    'AOT.BK': { name: 'บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)', price: 65.50, market: 'SET' },
-    'BBL.BK': { name: 'ธนาคารกรุงเทพ จำกัด (มหาชน)', price: 148.00, market: 'SET' },
-    'KBANK.BK': { name: 'ธนาคารกสิกรไทย จำกัด (มหาชน)', price: 132.50, market: 'SET' },
-    'PTT.BK': { name: 'บริษัท ปตท. จำกัด (มหาชน)', price: 36.25, market: 'SET' },
-    'PTTEP.BK': { name: 'บริษัท ปตท. สำรวจและผลิตปิโตรเลียม จำกัด (มหาชน)', price: 107.00, market: 'SET' },
-    'SCB.BK': { name: 'ธนาคารไทยพาณิชย์ จำกัด (มหาชน)', price: 98.75, market: 'SET' },
-    'CPALL.BK': { name: 'บริษัท ซีพี ออลล์ จำกัด (มหาชน)', price: 52.50, market: 'SET' },
-    'ADVANC.BK': { name: 'บริษัท แอดวานซ์ อินโฟร์ เซอร์วิส จำกัด (มหาชน)', price: 168.50, market: 'SET' },
-    'SCC.BK': { name: 'บริษัท ปูนซิเมนต์ไทย จำกัด (มหาชน)', price: 285.00, market: 'SET' },
-    'TOP.BK': { name: 'บริษัท ไทยออยล์ จำกัด (มหาชน)', price: 45.75, market: 'SET' },
-    // US stocks
-    'AAPL': { name: 'Apple Inc.', price: 184.40, market: 'NASDAQ' },
-    'TSLA': { name: 'Tesla Inc.', price: 248.87, market: 'NASDAQ' },
-    'GOOGL': { name: 'Alphabet Inc.', price: 142.56, market: 'NASDAQ' },
-    'MSFT': { name: 'Microsoft Corporation', price: 338.50, market: 'NASDAQ' },
-    'AMZN': { name: 'Amazon.com Inc.', price: 155.20, market: 'NASDAQ' },
-    'META': { name: 'Meta Platforms Inc.', price: 524.26, market: 'NASDAQ' },
-    'NVDA': { name: 'NVIDIA Corporation', price: 875.28, market: 'NASDAQ' }
-  };
-
-  const stockInfo = sampleData[symbol as keyof typeof sampleData];
-  const finalPrice = stockInfo?.price || basePrice;
-  
-  return {
+function generateErrorResponse(symbols: string[], errorMsg: string) {
+  return symbols.map(symbol => ({
     symbol,
-    shortName: symbol.replace('.BK', ''),
-    longName: stockInfo?.name || symbol,
-    regularMarketPrice: Math.round(finalPrice * 100) / 100,
-    regularMarketPreviousClose: Math.round((finalPrice - change) * 100) / 100,
-    regularMarketOpen: Math.round((finalPrice - (change * 0.5)) * 100) / 100,
-    regularMarketDayHigh: Math.round((finalPrice + Math.abs(change)) * 100) / 100,
-    regularMarketDayLow: Math.round((finalPrice - Math.abs(change)) * 100) / 100,
-    regularMarketVolume: Math.floor(Math.random() * 10000000),
-    marketCap: Math.round(finalPrice * Math.floor(Math.random() * 1000000000)),
-    trailingPE: Math.round((Math.random() * 30 + 5) * 100) / 100,
-    trailingEps: Math.round(Math.random() * 10 * 100) / 100,
-    dividendYield: Math.round(Math.random() * 0.05 * 10000) / 10000,
-    fiftyTwoWeekHigh: Math.round(finalPrice * (1 + Math.random() * 0.3) * 100) / 100,
-    fiftyTwoWeekLow: Math.round(finalPrice * (1 - Math.random() * 0.3) * 100) / 100,
-    currency: symbol.includes('.BK') ? 'THB' : 'USD',
-    exchange: stockInfo?.market || (symbol.includes('.BK') ? 'SET' : 'NASDAQ'),
+    error: errorMsg,
     success: false,
-    isSampleData: true
-  };
+    isSampleData: false,
+    company_name: `Error fetching ${symbol}`,
+    market: 'UNKNOWN',
+    current_price: 0,
+    change: 0,
+    changePercent: 0,
+    currency: 'USD'
+  }));
 }
 
 function determineMarket(symbol: string, exchange?: string): string {
@@ -179,6 +141,7 @@ Deno.serve(async (req) => {
     console.log('Fetching data for symbols:', symbols);
 
     const stockQuotes = [];
+    let failedSymbols = [];
     
     for (const symbol of symbols) {
       const cleanSymbol = symbol.trim();
@@ -190,16 +153,21 @@ Deno.serve(async (req) => {
         console.log(`Successfully fetched real data for ${cleanSymbol}`);
       } catch (error) {
         console.error(`Error fetching Yahoo Finance data for ${cleanSymbol}:`, error);
-        console.log(`Using sample data for ${cleanSymbol}`);
-        stockQuotes.push(getSampleStockData(cleanSymbol));
+        failedSymbols.push(cleanSymbol);
       }
     }
     
     if (stockQuotes.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'No data found for provided symbols' }),
+        JSON.stringify({ 
+          error: 'Yahoo Finance API unavailable',
+          message: `ไม่สามารถดึงข้อมูลจาก Yahoo Finance ได้สำหรับ: ${failedSymbols.join(', ')}`,
+          failedSymbols,
+          success: false,
+          data: []
+        }),
         { 
-          status: 404,
+          status: 503,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
@@ -261,6 +229,11 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         data: updatedData,
+        failedSymbols,
+        yahooApiStatus: 'connected',
+        totalRequested: symbols.length,
+        totalSuccessful: stockQuotes.length,
+        totalFailed: failedSymbols.length,
         timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -271,11 +244,14 @@ Deno.serve(async (req) => {
     
     return new Response(
       JSON.stringify({ 
-        error: 'Failed to fetch stock data',
-        details: error.message 
+        error: 'Yahoo Finance API Error',
+        message: 'ไม่สามารถเชื่อมต่อกับ Yahoo Finance API ได้',
+        details: error.message,
+        success: false,
+        yahooApiStatus: 'disconnected'
       }),
       { 
-        status: 500,
+        status: 503,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
