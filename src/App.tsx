@@ -10,6 +10,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Portfolio from "./pages/Portfolio";
+import Analysis from "./pages/Analysis";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +30,7 @@ const App = () => (
               <Route path="/*" element={<DashboardLayout />}>
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="portfolio" element={<Portfolio />} />
+                <Route path="analysis" element={<Analysis />} />
               </Route>
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

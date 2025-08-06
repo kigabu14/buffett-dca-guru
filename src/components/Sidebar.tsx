@@ -32,7 +32,7 @@ const navigation = [
     name: 'analysis',
     href: '/analysis',
     icon: BarChart3,
-    thaiName: 'Buffett Analysis'
+    thaiName: 'การวิเคราะห์ Buffett'
   },
   {
     name: 'dividends',
