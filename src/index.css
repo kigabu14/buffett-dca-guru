@@ -60,6 +60,12 @@ All colors MUST be HSL.
     --shadow-gold: 0 10px 30px -10px hsl(45 93% 58% / 0.3);
     --shadow-blue: 0 10px 30px -10px hsl(220 70% 50% / 0.3);
     --shadow-premium: 0 20px 40px -15px hsl(45 93% 58% / 0.4);
+    
+    /* Success/Error colors */
+    --success: 142 76% 36%;  /* Green */
+    --success-foreground: 60 30% 96%;
+    --warning: 48 96% 53%;  /* Yellow */
+    --warning-foreground: 210 30% 8%;
   }
 
   .light {
@@ -91,6 +97,11 @@ All colors MUST be HSL.
     --border: 220 15% 88%;
     --input: 220 15% 90%;
     --ring: 45 93% 58%;  /* Gold focus */
+    
+    --success: 142 76% 36%;  /* Green */
+    --success-foreground: 60 30% 98%;
+    --warning: 48 96% 53%;  /* Yellow */
+    --warning-foreground: 210 30% 8%;
 
     --sidebar-background: 60 30% 96%;
     --sidebar-foreground: 210 30% 8%;

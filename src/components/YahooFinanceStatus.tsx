@@ -34,20 +34,20 @@ export const YahooFinanceStatus: React.FC = () => {
   const getStatusIcon = () => {
     switch (status) {
       case 'connected':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-success" />;
       case 'disconnected':
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-destructive" />;
       case 'checking':
-        return <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />;
+        return <RefreshCw className="h-4 w-4 animate-spin text-accent" />;
       default:
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+        return <AlertCircle className="h-4 w-4 text-warning" />;
     }
   };
 
   const getStatusBadge = () => {
     switch (status) {
       case 'connected':
-        return <Badge variant="default" className="bg-green-500">เชื่อมต่อแล้ว</Badge>;
+        return <Badge className="bg-success text-success-foreground">เชื่อมต่อแล้ว</Badge>;
       case 'disconnected':
         return <Badge variant="destructive">ไม่สามารถเชื่อมต่อ</Badge>;
       case 'checking':
