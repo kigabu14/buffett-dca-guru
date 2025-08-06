@@ -22,12 +22,21 @@ export interface StockData {
   roe: number;
   debtToEquity: number;
   profitMargin: number;
+  
+  // Sample data flag
+  isSampleData?: boolean;
 }
 
 interface StockResponse {
   data: StockData[];
   source: string;
   timestamp: string;
+}
+
+interface HistoricalDataPoint {
+  date: string;
+  price: number;
+  volume: number;
 }
 
 export class YahooFinanceService {
@@ -65,7 +74,8 @@ export class YahooFinanceService {
           volume: stockData.volume || 0,
           roe: 0,
           debtToEquity: 0,
-          profitMargin: 0
+          profitMargin: 0,
+          isSampleData: false
         };
       } else {
         throw new Error(`ไม่พบข้อมูลหุ้น ${symbol}`);
@@ -109,7 +119,8 @@ export class YahooFinanceService {
           volume: stockData.volume || 0,
           roe: 0,
           debtToEquity: 0,
-          profitMargin: 0
+          profitMargin: 0,
+          isSampleData: false
         }));
       } else {
         throw new Error('ไม่พบข้อมูลหุ้น');
@@ -117,6 +128,102 @@ export class YahooFinanceService {
     } catch (error) {
       console.error('Error fetching stocks:', error);
       throw error;
+    }
+  }
+
+  // Get historical data for charts
+  static async getHistoricalData(symbol: string, period: string = '1mo', interval: string = '1d'): Promise<HistoricalDataPoint[]> {
+    try {
+      console.log(`Fetching historical data for: ${symbol}, period: ${period}, interval: ${interval}`);
+      
+      const { data, error } = await supabase.functions.invoke('stock-data', {
+        body: { 
+          symbols: [symbol], 
+          period,
+          interval,
+          historical: true 
+        }
+      });
+
+      if (error) {
+        console.error('Error fetching historical data:', error);
+        throw new Error(`ไม่สามารถดึงข้อมูลประวัติศาสตร์หุ้น ${symbol} ได้: ${error.message}`);
+      }
+
+      if (data?.historical && data.historical.length > 0) {
+        return data.historical.map((point: any) => ({
+          date: point.date,
+          price: point.close || point.price,
+          volume: point.volume || 0
+        }));
+      } else {
+        throw new Error(`ไม่พบข้อมูลประวัติศาสตร์หุ้น ${symbol}`);
+      }
+    } catch (error) {
+      console.error(`Error fetching historical data for ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  // Calculate DCA Score based on Warren Buffett principles
+  static calculateDCAScore(stock: StockData): number {
+    let score = 0;
+    
+    // 1. P/E Ratio (lower is better, < 15 is good)
+    if (stock.pe > 0 && stock.pe < 15) score += 1;
+    else if (stock.pe > 0 && stock.pe < 25) score += 0.5;
+    
+    // 2. Market Cap (prefer large companies for stability)
+    if (stock.marketCap > 10000000000) score += 1; // > 10B
+    else if (stock.marketCap > 1000000000) score += 0.5; // > 1B
+    
+    // 3. Dividend Yield (consistent dividend payers)
+    if (stock.dividendYield > 0.02) score += 1; // > 2%
+    else if (stock.dividendYield > 0) score += 0.5;
+    
+    // 4. EPS (positive earnings)
+    if (stock.eps > 0) score += 1;
+    
+    // 5. Price consistency (not too volatile)
+    if (stock.changePercent <= 5 && stock.changePercent >= -5) score += 1;
+    
+    // 6. ROE (Return on Equity - higher is better)
+    if (stock.roe > 0.15) score += 1; // > 15%
+    else if (stock.roe > 0.1) score += 0.5; // > 10%
+    
+    // 7. Debt to Equity (lower is better)
+    if (stock.debtToEquity < 0.3) score += 1; // < 30%
+    else if (stock.debtToEquity < 0.5) score += 0.5; // < 50%
+    
+    // 8. Profit Margin (higher is better)
+    if (stock.profitMargin > 0.2) score += 1; // > 20%
+    else if (stock.profitMargin > 0.1) score += 0.5; // > 10%
+    
+    return Math.round(score);
+  }
+
+  // Get DCA recommendation based on score
+  static getDCARecommendation(score: number): { message: string; color: string } {
+    if (score >= 7) {
+      return {
+        message: "แนะนำสูง - เหมาะสำหรับ DCA ระยะยาว",
+        color: "text-green-600"
+      };
+    } else if (score >= 5) {
+      return {
+        message: "แนะนำปานกลาง - พิจารณาการลงทุน",
+        color: "text-blue-600"
+      };
+    } else if (score >= 3) {
+      return {
+        message: "ระมัดระวัง - ศึกษาเพิ่มเติมก่อนลงทุน",
+        color: "text-yellow-600"
+      };
+    } else {
+      return {
+        message: "ไม่แนะนำ - มีความเสี่ยงสูง",
+        color: "text-red-600"
+      };
     }
   }
 
