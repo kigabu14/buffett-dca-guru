@@ -8,7 +8,8 @@ import {
   BarChart3, 
   Bell, 
   Settings,
-  LogOut 
+  LogOut,
+  GitCompare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,6 +28,12 @@ const navigation = [
     href: '/portfolio',
     icon: TrendingUp,
     thaiName: 'พอร์ตการลงทุน'
+  },
+  {
+    name: 'compare',
+    href: '/compare',
+    icon: GitCompare,
+    thaiName: 'เปรียบเทียบหุ้น'
   },
   {
     name: 'analysis',

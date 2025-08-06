@@ -246,4 +246,26 @@ export class YahooFinanceService {
   static formatPercentage(value: number): string {
     return `${(value * 100).toFixed(2)}%`;
   }
+
+  static async getHistoricalData(symbol: string, period: string = '1mo', interval: string = '1d'): Promise<any[]> {
+    try {
+      const response = await fetch('/api/stock-historical', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ symbol, period, interval }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical data');
+      }
+
+      const data = await response.json();
+      return data.historical || [];
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      return [];
+    }
+  }
 }
