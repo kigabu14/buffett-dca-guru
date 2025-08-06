@@ -23,7 +23,6 @@ interface StockInvestment {
   buy_price: number;
   current_price: number | null;
   commission: number;
-  commission_rate: number | null;
   purchase_date: string;
   market: string;
   dividend_received: number;
@@ -31,6 +30,7 @@ interface StockInvestment {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  user_id: string;
 }
 
 const Portfolio = () => {
@@ -72,10 +72,7 @@ const Portfolio = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setInvestments((data || []).map(inv => ({
-        ...inv,
-        commission_rate: inv.commission_rate || 0.25 // default 0.25% สำหรับข้อมูลเก่า
-      })));
+      setInvestments(data || []);
     } catch (error) {
       console.error('Error fetching investments:', error);
       toast({
