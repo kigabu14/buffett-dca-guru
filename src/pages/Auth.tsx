@@ -42,7 +42,7 @@ const Auth = () => {
               Thai Investment App
             </h1>
             <p className="text-xl text-muted-foreground">
-              {t('welcome.subtitle')}
+              เริ่มสร้างพอร์ตการลงทุนที่ยอดเยียมของคุณที่นี่!
             </p>
           </div>
 
@@ -78,7 +78,7 @@ const Auth = () => {
         <Card className="w-full max-w-md mx-auto shadow-premium border-border/50 backdrop-blur">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl bg-gradient-premium bg-clip-text text-transparent">
-              {t('welcome.title')}
+              เข้าสู่ระบบการลงทุน
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               เข้าสู่ระบบหรือสมัครสมาชิกเพื่อเริ่มลงทุน
