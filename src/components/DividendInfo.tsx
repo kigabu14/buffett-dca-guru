@@ -9,9 +9,9 @@ interface DividendInfoProps {
 }
 
 export const DividendInfo = ({ stock }: DividendInfoProps) => {
-  const formatDividendYield = (yield: number) => {
-    if (yield <= 0) return '-';
-    return `${(yield * 100).toFixed(2)}%`;
+  const formatDividendYield = (yieldValue: number) => {
+    if (yieldValue <= 0) return '-';
+    return `${(yieldValue * 100).toFixed(2)}%`;
   };
 
   const formatDividendRate = (rate: number, currency: string) => {
