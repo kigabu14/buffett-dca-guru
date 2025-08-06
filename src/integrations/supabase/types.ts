@@ -80,6 +80,135 @@ export type Database = {
         }
         Relationships: []
       }
+      buffett_analysis: {
+        Row: {
+          analysis_date: string
+          created_at: string
+          current_price: number | null
+          current_ratio: number | null
+          current_ratio_score: number | null
+          debt_equity_ratio: number | null
+          debt_equity_ratio_score: number | null
+          eps_growth: number | null
+          eps_growth_score: number | null
+          free_cash_flow: number | null
+          free_cash_flow_score: number | null
+          id: string
+          management_score: number | null
+          moat_score: number | null
+          net_profit_margin: number | null
+          net_profit_margin_score: number | null
+          operating_margin: number | null
+          operating_margin_score: number | null
+          recommendation: string | null
+          roa_percentage: number | null
+          roa_score: number | null
+          roe_percentage: number | null
+          roe_score: number | null
+          share_dilution_score: number | null
+          symbol: string
+          total_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          analysis_date?: string
+          created_at?: string
+          current_price?: number | null
+          current_ratio?: number | null
+          current_ratio_score?: number | null
+          debt_equity_ratio?: number | null
+          debt_equity_ratio_score?: number | null
+          eps_growth?: number | null
+          eps_growth_score?: number | null
+          free_cash_flow?: number | null
+          free_cash_flow_score?: number | null
+          id?: string
+          management_score?: number | null
+          moat_score?: number | null
+          net_profit_margin?: number | null
+          net_profit_margin_score?: number | null
+          operating_margin?: number | null
+          operating_margin_score?: number | null
+          recommendation?: string | null
+          roa_percentage?: number | null
+          roa_score?: number | null
+          roe_percentage?: number | null
+          roe_score?: number | null
+          share_dilution_score?: number | null
+          symbol: string
+          total_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          analysis_date?: string
+          created_at?: string
+          current_price?: number | null
+          current_ratio?: number | null
+          current_ratio_score?: number | null
+          debt_equity_ratio?: number | null
+          debt_equity_ratio_score?: number | null
+          eps_growth?: number | null
+          eps_growth_score?: number | null
+          free_cash_flow?: number | null
+          free_cash_flow_score?: number | null
+          id?: string
+          management_score?: number | null
+          moat_score?: number | null
+          net_profit_margin?: number | null
+          net_profit_margin_score?: number | null
+          operating_margin?: number | null
+          operating_margin_score?: number | null
+          recommendation?: string | null
+          roa_percentage?: number | null
+          roa_score?: number | null
+          roe_percentage?: number | null
+          roe_score?: number | null
+          share_dilution_score?: number | null
+          symbol?: string
+          total_score?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dividend_history: {
+        Row: {
+          announcement_date: string | null
+          created_at: string
+          currency: string
+          dividend_amount: number
+          dividend_type: string
+          ex_dividend_date: string
+          id: string
+          payment_date: string | null
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          announcement_date?: string | null
+          created_at?: string
+          currency?: string
+          dividend_amount: number
+          dividend_type?: string
+          ex_dividend_date: string
+          id?: string
+          payment_date?: string | null
+          symbol: string
+          updated_at?: string
+        }
+        Update: {
+          announcement_date?: string | null
+          created_at?: string
+          currency?: string
+          dividend_amount?: number
+          dividend_type?: string
+          ex_dividend_date?: string
+          id?: string
+          payment_date?: string | null
+          symbol?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       historical_stock_data: {
         Row: {
           adjusted_close: number | null
@@ -116,6 +245,87 @@ export type Database = {
           open_price?: number
           symbol?: string
           volume?: number
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          buffett_score_update_enabled: boolean
+          created_at: string
+          dca_opportunity_enabled: boolean
+          dividend_reminder_enabled: boolean
+          id: string
+          line_enabled: boolean
+          line_notify_token: string | null
+          price_alert_enabled: boolean
+          telegram_chat_id: string | null
+          telegram_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          buffett_score_update_enabled?: boolean
+          created_at?: string
+          dca_opportunity_enabled?: boolean
+          dividend_reminder_enabled?: boolean
+          id?: string
+          line_enabled?: boolean
+          line_notify_token?: string | null
+          price_alert_enabled?: boolean
+          telegram_chat_id?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          buffett_score_update_enabled?: boolean
+          created_at?: string
+          dca_opportunity_enabled?: boolean
+          dividend_reminder_enabled?: boolean
+          id?: string
+          line_enabled?: boolean
+          line_notify_token?: string | null
+          price_alert_enabled?: boolean
+          telegram_chat_id?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          read_at: string | null
+          symbol: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          read_at?: string | null
+          symbol?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          read_at?: string | null
+          symbol?: string | null
+          title?: string
+          type?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -182,6 +392,42 @@ export type Database = {
         }
         Relationships: []
       }
+      price_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          symbol: string
+          target_price: number
+          triggered_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          symbol: string
+          target_price: number
+          triggered_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          symbol?: string
+          target_price?: number
+          triggered_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           commission_rate: number | null
@@ -219,8 +465,11 @@ export type Database = {
           company_name: string | null
           created_at: string
           current_price: number | null
+          dividend_received: number | null
+          dividend_yield_at_purchase: number | null
           id: string
           market: string
+          notes: string | null
           purchase_date: string
           quantity: number
           symbol: string
@@ -233,8 +482,11 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           current_price?: number | null
+          dividend_received?: number | null
+          dividend_yield_at_purchase?: number | null
           id?: string
           market?: string
+          notes?: string | null
           purchase_date?: string
           quantity: number
           symbol: string
@@ -247,13 +499,49 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           current_price?: number | null
+          dividend_received?: number | null
+          dividend_yield_at_purchase?: number | null
           id?: string
           market?: string
+          notes?: string | null
           purchase_date?: string
           quantity?: number
           symbol?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      xd_calendar: {
+        Row: {
+          created_at: string
+          dividend_amount: number
+          dividend_yield: number | null
+          ex_dividend_date: string
+          id: string
+          payment_date: string | null
+          record_date: string | null
+          symbol: string
+        }
+        Insert: {
+          created_at?: string
+          dividend_amount: number
+          dividend_yield?: number | null
+          ex_dividend_date: string
+          id?: string
+          payment_date?: string | null
+          record_date?: string | null
+          symbol: string
+        }
+        Update: {
+          created_at?: string
+          dividend_amount?: number
+          dividend_yield?: number | null
+          ex_dividend_date?: string
+          id?: string
+          payment_date?: string | null
+          record_date?: string | null
+          symbol?: string
         }
         Relationships: []
       }
