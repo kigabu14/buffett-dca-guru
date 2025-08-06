@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const symbols = body.symbols ? body.symbols.split(',') : [body.symbol];
+    const symbols = Array.isArray(body.symbols) ? body.symbols : [body.symbol];
     
     if (!symbols || symbols.length === 0) {
       return new Response(

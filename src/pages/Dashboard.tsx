@@ -59,7 +59,7 @@ const Dashboard = () => {
       setStockData(stocks);
       setLastUpdate(new Date());
       
-      const realDataCount = stocks.filter(s => s.success).length;
+      const realDataCount = stocks.filter(s => !s.isSampleData).length;
       const sampleDataCount = stocks.filter(s => s.isSampleData).length;
       
       if (sampleDataCount > 0) {
