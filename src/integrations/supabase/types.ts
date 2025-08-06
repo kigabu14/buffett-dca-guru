@@ -512,6 +512,72 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_markets: {
+        Row: {
+          company_name: string
+          created_at: string
+          current_price: number | null
+          day_high: number | null
+          day_low: number | null
+          dividend_yield: number | null
+          eps: number | null
+          id: string
+          industry: string | null
+          last_updated: string | null
+          market: string
+          market_cap: number | null
+          open_price: number | null
+          pe_ratio: number | null
+          previous_close: number | null
+          sector: string | null
+          symbol: string
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          current_price?: number | null
+          day_high?: number | null
+          day_low?: number | null
+          dividend_yield?: number | null
+          eps?: number | null
+          id?: string
+          industry?: string | null
+          last_updated?: string | null
+          market: string
+          market_cap?: number | null
+          open_price?: number | null
+          pe_ratio?: number | null
+          previous_close?: number | null
+          sector?: string | null
+          symbol: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          current_price?: number | null
+          day_high?: number | null
+          day_low?: number | null
+          dividend_yield?: number | null
+          eps?: number | null
+          id?: string
+          industry?: string | null
+          last_updated?: string | null
+          market?: string
+          market_cap?: number | null
+          open_price?: number | null
+          pe_ratio?: number | null
+          previous_close?: number | null
+          sector?: string | null
+          symbol?: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
       xd_calendar: {
         Row: {
           created_at: string
