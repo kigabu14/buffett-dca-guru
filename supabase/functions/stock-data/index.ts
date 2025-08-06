@@ -12,33 +12,56 @@ async function fetchYahooFinanceData(symbol: string) {
   try {
     console.log(`Fetching data for ${symbol} from Yahoo Finance`);
     
-    // Use the quote API endpoint for real-time data
-    const response = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      }
-    });
+    // Use multiple Yahoo Finance endpoints for comprehensive data
+    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
+    const summaryUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=summaryDetail,financialData,defaultKeyStatistics,calendarEvents`;
     
-    if (!response.ok) {
-      console.error(`HTTP error for ${symbol}! status: ${response.status}`);
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const [quoteResponse, summaryResponse] = await Promise.all([
+      fetch(quoteUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+        }
+      }),
+      fetch(summaryUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+        }
+      }).catch(() => null) // Don't fail if summary fails
+    ]);
+    
+    if (!quoteResponse.ok) {
+      console.error(`HTTP error for ${symbol}! status: ${quoteResponse.status}`);
+      throw new Error(`HTTP error! status: ${quoteResponse.status}`);
     }
     
-    const data = await response.json();
+    const quoteData = await quoteResponse.json();
+    let summaryData = null;
     
-    if (!data.quoteResponse || !data.quoteResponse.result || data.quoteResponse.result.length === 0) {
+    if (summaryResponse && summaryResponse.ok) {
+      summaryData = await summaryResponse.json();
+    }
+    
+    if (!quoteData.quoteResponse || !quoteData.quoteResponse.result || quoteData.quoteResponse.result.length === 0) {
       console.error(`No data found for ${symbol}`);
       throw new Error('No quote data found');
     }
 
-    const quote = data.quoteResponse.result[0];
+    const quote = quoteData.quoteResponse.result[0];
+    const summary = summaryData?.quoteSummary?.result?.[0];
     
     // Extract relevant data
     const currentPrice = quote.regularMarketPrice || 0;
     const previousClose = quote.regularMarketPreviousClose || 0;
     const change = currentPrice - previousClose;
     const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+
+    // Extract financial data from summary
+    const financialData = summary?.financialData;
+    const summaryDetail = summary?.summaryDetail;
+    const keyStatistics = summary?.defaultKeyStatistics;
+    const calendarEvents = summary?.calendarEvents;
 
     console.log(`Successfully fetched data for ${symbol}: price=${currentPrice}`);
 
@@ -52,15 +75,24 @@ async function fetchYahooFinanceData(symbol: string) {
       market: determineMarket(quote.symbol, quote.market),
       currency: quote.currency || (quote.symbol.includes('.BK') ? 'THB' : 'USD'),
       marketCap: quote.marketCap || 0,
-      pe: quote.trailingPE || 0,
-      eps: quote.epsTrailingTwelveMonths || 0,
-      dividendYield: quote.dividendYield || 0,
+      pe: quote.trailingPE || keyStatistics?.trailingPE?.raw || 0,
+      eps: quote.epsTrailingTwelveMonths || keyStatistics?.trailingEps?.raw || 0,
+      dividendYield: quote.dividendYield || summaryDetail?.dividendYield?.raw || 0,
+      dividendRate: quote.dividendRate || summaryDetail?.dividendRate?.raw || 0,
+      exDividendDate: quote.exDividendDate ? new Date(quote.exDividendDate * 1000).toISOString().split('T')[0] : null,
+      dividendDate: calendarEvents?.dividendDate?.raw ? new Date(calendarEvents.dividendDate.raw * 1000).toISOString().split('T')[0] : null,
       weekHigh52: quote.fiftyTwoWeekHigh || 0,
       weekLow52: quote.fiftyTwoWeekLow || 0,
       volume: quote.regularMarketVolume || 0,
       open: quote.regularMarketOpen || currentPrice,
       dayHigh: quote.regularMarketDayHigh || currentPrice,
       dayLow: quote.regularMarketDayLow || currentPrice,
+      // Financial ratios for DCA/Buffett scoring
+      roe: financialData?.returnOnEquity?.raw || 0,
+      debtToEquity: keyStatistics?.debtToEquity?.raw || 0,
+      profitMargin: financialData?.profitMargins?.raw || 0,
+      operatingMargin: financialData?.operatingMargins?.raw || 0,
+      currentRatio: financialData?.currentRatio?.raw || 0,
       success: true
     };
   } catch (error) {
@@ -183,6 +215,14 @@ Deno.serve(async (req) => {
         pe_ratio: quote.pe,
         eps: quote.eps,
         dividend_yield: quote.dividendYield,
+        dividend_rate: quote.dividendRate,
+        ex_dividend_date: quote.exDividendDate,
+        dividend_date: quote.dividendDate,
+        roe: quote.roe,
+        debt_to_equity: quote.debtToEquity,
+        profit_margin: quote.profitMargin,
+        operating_margin: quote.operatingMargin,
+        current_ratio: quote.currentRatio,
         last_updated: new Date().toISOString()
       };
 

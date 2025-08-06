@@ -14,6 +14,9 @@ export interface StockData {
   pe: number;
   eps: number;
   dividendYield: number;
+  dividendRate: number;
+  exDividendDate: string | null;
+  dividendDate: string | null;
   weekHigh52: number;
   weekLow52: number;
   volume: number;
@@ -22,6 +25,8 @@ export interface StockData {
   roe: number;
   debtToEquity: number;
   profitMargin: number;
+  operatingMargin: number;
+  currentRatio: number;
   
   // Sample data flag
   isSampleData?: boolean;
@@ -69,12 +74,17 @@ export class YahooFinanceService {
           pe: stockData.pe_ratio || 0,
           eps: stockData.eps || 0,
           dividendYield: stockData.dividend_yield || 0,
+          dividendRate: stockData.dividend_rate || 0,
+          exDividendDate: stockData.ex_dividend_date || null,
+          dividendDate: stockData.dividend_date || null,
           weekHigh52: 0,
           weekLow52: 0,
           volume: stockData.volume || 0,
-          roe: 0,
-          debtToEquity: 0,
-          profitMargin: 0,
+          roe: stockData.roe || 0,
+          debtToEquity: stockData.debt_to_equity || 0,
+          profitMargin: stockData.profit_margin || 0,
+          operatingMargin: stockData.operating_margin || 0,
+          currentRatio: stockData.current_ratio || 0,
           isSampleData: false
         };
       } else {
@@ -114,12 +124,17 @@ export class YahooFinanceService {
           pe: stockData.pe_ratio || 0,
           eps: stockData.eps || 0,
           dividendYield: stockData.dividend_yield || 0,
+          dividendRate: stockData.dividend_rate || 0,
+          exDividendDate: stockData.ex_dividend_date || null,
+          dividendDate: stockData.dividend_date || null,
           weekHigh52: 0,
           weekLow52: 0,
           volume: stockData.volume || 0,
-          roe: 0,
-          debtToEquity: 0,
-          profitMargin: 0,
+          roe: stockData.roe || 0,
+          debtToEquity: stockData.debt_to_equity || 0,
+          profitMargin: stockData.profit_margin || 0,
+          operatingMargin: stockData.operating_margin || 0,
+          currentRatio: stockData.current_ratio || 0,
           isSampleData: false
         }));
       } else {
@@ -185,21 +200,64 @@ export class YahooFinanceService {
     if (stock.eps > 0) score += 1;
     
     // 5. Price consistency (not too volatile)
-    if (stock.changePercent <= 5 && stock.changePercent >= -5) score += 1;
+    if (Math.abs(stock.changePercent) <= 5) score += 1;
     
     // 6. ROE (Return on Equity - higher is better)
     if (stock.roe > 0.15) score += 1; // > 15%
     else if (stock.roe > 0.1) score += 0.5; // > 10%
     
     // 7. Debt to Equity (lower is better)
-    if (stock.debtToEquity < 0.3) score += 1; // < 30%
-    else if (stock.debtToEquity < 0.5) score += 0.5; // < 50%
+    if (stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 1; // < 30%
+    else if (stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 0.5; // < 50%
     
     // 8. Profit Margin (higher is better)
     if (stock.profitMargin > 0.2) score += 1; // > 20%
     else if (stock.profitMargin > 0.1) score += 0.5; // > 10%
     
     return Math.round(score);
+  }
+
+  // Calculate Buffett Score with 11 criteria
+  static calculateBuffettScore(stock: StockData): { score: number; recommendation: string } {
+    let score = 0;
+    
+    // 1. ROE > 15%
+    if (stock.roe > 0.15) score += 2;
+    else if (stock.roe > 0.10) score += 1;
+    
+    // 2. Debt to Equity < 0.5
+    if (stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 2;
+    else if (stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 1;
+    
+    // 3. Profit Margin > 15%
+    if (stock.profitMargin > 0.15) score += 2;
+    else if (stock.profitMargin > 0.10) score += 1;
+    
+    // 4. Operating Margin > 15%
+    if (stock.operatingMargin > 0.15) score += 2;
+    else if (stock.operatingMargin > 0.10) score += 1;
+    
+    // 5. Current Ratio > 1.5
+    if (stock.currentRatio > 1.5) score += 2;
+    else if (stock.currentRatio > 1.0) score += 1;
+    
+    // 6. P/E Ratio reasonable
+    if (stock.pe > 0 && stock.pe < 15) score += 2;
+    else if (stock.pe > 0 && stock.pe < 25) score += 1;
+    
+    // 7. Consistent dividend payments
+    if (stock.dividendYield > 0.02) score += 2;
+    else if (stock.dividendYield > 0) score += 1;
+    
+    // 8. EPS Growth (positive EPS)
+    if (stock.eps > 0) score += 1;
+    
+    let recommendation = 'AVOID';
+    if (score >= 12) recommendation = 'STRONG_BUY';
+    else if (score >= 8) recommendation = 'BUY';
+    else if (score >= 5) recommendation = 'HOLD';
+    
+    return { score, recommendation };
   }
 
   // Get DCA recommendation based on score
@@ -327,5 +385,20 @@ export class YahooFinanceService {
 
   static formatPercentage(value: number): string {
     return `${(value * 100).toFixed(2)}%`;
+  }
+
+  static formatDate(dateString: string | null): string {
+    if (!dateString) return '-';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return '-';
+    }
   }
 }

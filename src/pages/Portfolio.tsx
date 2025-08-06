@@ -43,6 +43,7 @@ const Portfolio = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingInvestment, setEditingInvestment] = useState<StockInvestment | null>(null);
   const [selectedStock, setSelectedStock] = useState('');
   const [stockPrice, setStockPrice] = useState<number>(0);
   const [currentStockData, setCurrentStockData] = useState<any>(null);
@@ -197,39 +198,49 @@ const Portfolio = () => {
       const totalValue = quantity * buyPrice;
       const commission = (totalValue * commissionRate) / 100;
 
-      const { error } = await supabase
-        .from('stock_investments')
-        .insert({
-          user_id: user.id,
-          symbol: formData.symbol,
-          company_name: formData.company_name || formData.symbol,
-          quantity,
-          buy_price: buyPrice,
-          commission,
-          commission_rate: commissionRate,
-          purchase_date: formData.purchase_date,
-          market: formData.market,
-          notes: formData.notes,
-          current_price: stockPrice > 0 ? stockPrice : buyPrice,
-          dividend_received: 0,
-          dividend_yield_at_purchase: null
-        });
+      const investmentData = {
+        user_id: user.id,
+        symbol: formData.symbol,
+        company_name: formData.company_name || formData.symbol,
+        quantity,
+        buy_price: buyPrice,
+        commission,
+        commission_rate: commissionRate,
+        purchase_date: formData.purchase_date,
+        market: formData.market,
+        notes: formData.notes,
+        current_price: stockPrice > 0 ? stockPrice : buyPrice,
+        dividend_received: 0,
+        dividend_yield_at_purchase: null
+      };
+
+      const { error } = editingInvestment 
+        ? await supabase
+            .from('stock_investments')
+            .update(investmentData)
+            .eq('id', editingInvestment.id)
+        : await supabase
+            .from('stock_investments')
+            .insert(investmentData);
 
       if (error) throw error;
 
       toast({
         title: "สำเร็จ",
-        description: `เพิ่ม ${formData.symbol} เข้าพอร์ตแล้ว`,
+        description: editingInvestment 
+          ? `แก้ไข ${formData.symbol} สำเร็จ`
+          : `เพิ่ม ${formData.symbol} เข้าพอร์ตแล้ว`,
       });
 
       setAddDialogOpen(false);
+      setEditingInvestment(null);
       resetForm();
       fetchInvestments();
     } catch (error) {
-      console.error('Error adding investment:', error);
+      console.error('Error saving investment:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถเพิ่มการลงทุนได้",
+        description: editingInvestment ? "ไม่สามารถแก้ไขการลงทุนได้" : "ไม่สามารถเพิ่มการลงทุนได้",
         variant: "destructive"
       });
     }
@@ -248,6 +259,22 @@ const Portfolio = () => {
     });
     setSelectedStock('');
     setStockPrice(0);
+    setCurrentStockData(null);
+  };
+
+  const handleEditInvestment = (investment: StockInvestment) => {
+    setEditingInvestment(investment);
+    setFormData({
+      symbol: investment.symbol,
+      company_name: investment.company_name || investment.symbol,
+      quantity: investment.quantity.toString(),
+      buy_price: investment.buy_price.toString(),
+      commission_rate: ((investment.commission / (investment.quantity * investment.buy_price)) * 100).toFixed(2),
+      purchase_date: investment.purchase_date,
+      market: investment.market,
+      notes: investment.notes || ''
+    });
+    setAddDialogOpen(true);
   };
 
   const deleteInvestment = async (id: string, symbol: string) => {
@@ -302,6 +329,7 @@ const Portfolio = () => {
       buy_price: stock.price > 0 ? stock.price.toString() : prev.buy_price
     }));
     setStockPrice(stock.price);
+    setCurrentStockData(stock);
   };
 
   // คำนวณผลรวมพอร์ต
@@ -341,7 +369,13 @@ const Portfolio = () => {
             อัพเดทราคา
           </Button>
           
-          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+          <Dialog open={addDialogOpen} onOpenChange={(open) => {
+            setAddDialogOpen(open);
+            if (!open) {
+              setEditingInvestment(null);
+              resetForm();
+            }
+          }}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-premium hover:shadow-gold">
                 <Plus className="mr-2 h-4 w-4" />
@@ -350,7 +384,9 @@ const Portfolio = () => {
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>เพิ่มการลงทุนใหม่</DialogTitle>
+                <DialogTitle>
+                  {editingInvestment ? 'แก้ไขการลงทุน' : 'เพิ่มการลงทุนใหม่'}
+                </DialogTitle>
                 <DialogDescription>
                   กรอกข้อมูลการซื้อหุ้นของคุณ
                 </DialogDescription>
@@ -358,23 +394,27 @@ const Portfolio = () => {
               
               <form onSubmit={handleAddInvestment} className="space-y-4">
                 {/* Stock Selector */}
-                <div>
-                  <Label>เลือกหุ้น</Label>
-                  <StockSelector
-                    value={selectedStock}
-                    onValueChange={setSelectedStock}
-                    onStockSelect={handleStockSelect}
-                    placeholder="ค้นหาหุ้น..."
-                  />
-                </div>
+                {!editingInvestment && (
+                  <div>
+                    <Label>เลือกหุ้น</Label>
+                    <StockSelector
+                      value={selectedStock}
+                      onValueChange={setSelectedStock}
+                      onStockSelect={handleStockSelect}
+                      placeholder="ค้นหาหุ้น..."
+                    />
+                  </div>
+                )}
 
                 {/* แสดงข้อมูลหุ้นที่เลือก */}
-                {formData.symbol && (
+                {(formData.symbol || editingInvestment) && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
                       หุ้น: {formData.symbol} | ตลาด: {formData.market} | 
-                      ราคาปัจจุบัน: {stockPrice > 0 ? `${formData.market === 'SET' ? '฿' : '$'}${stockPrice.toFixed(2)}` : 'ไม่พบข้อมูล'}
+                      {stockPrice > 0 && !editingInvestment && 
+                        ` ราคาปัจจุบัน: ${formData.market === 'SET' ? '฿' : '$'}${stockPrice.toFixed(2)}`
+                      }
                     </AlertDescription>
                   </Alert>
                 )}
@@ -394,7 +434,7 @@ const Portfolio = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="buy_price">ราคาซื้อ</Label>
+                    <Label htmlFor="buy_price">ราคาซื้อ (แก้ไขได้)</Label>
                     <Input
                       id="buy_price"
                       type="number"
@@ -452,13 +492,14 @@ const Portfolio = () => {
 
                 <div className="flex gap-2 pt-4">
                   <Button type="submit" className="flex-1">
-                    เพิ่มการลงทุน
+                    {editingInvestment ? 'บันทึกการแก้ไข' : 'เพิ่มการลงทุน'}
                   </Button>
                   <Button 
                     type="button"
                     variant="outline" 
                     onClick={() => {
                       setAddDialogOpen(false);
+                      setEditingInvestment(null);
                       resetForm();
                     }}
                   >
@@ -611,6 +652,14 @@ const Portfolio = () => {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditInvestment(investment)}
+                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"

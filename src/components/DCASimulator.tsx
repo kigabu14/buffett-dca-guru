@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Calculator, TrendingUp, DollarSign } from "lucide-react";
-import { YahooFinanceService } from "@/services/YahooFinanceService";
+import { StockSelector } from "@/components/StockSelector";
+import { StockData, YahooFinanceService } from "@/services/YahooFinanceService";
 
 interface DCASimulatorProps {
   symbol?: string;
@@ -27,14 +29,27 @@ interface DCAResults {
 }
 
 export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulatorProps) => {
+  const [selectedStock, setSelectedStock] = useState<StockData | null>(null);
   const [amount, setAmount] = useState("1000");
   const [frequency, setFrequency] = useState("monthly");
   const [duration, setDuration] = useState("12");
   const [results, setResults] = useState<DCAResults | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const handleStockSelect = (stock: StockData) => {
+    setSelectedStock(stock);
+    setResults(null); // Clear previous results
+  };
+
   const calculateDCA = () => {
-    if (!currentPrice || !amount || !duration) return;
+    const stockToUse = selectedStock || (symbol && currentPrice ? {
+      symbol,
+      price: currentPrice,
+      dividendYield: dividendYield || 0,
+      currency: symbol.includes('.BK') ? 'THB' : 'USD'
+    } as StockData : null);
+
+    if (!stockToUse || !amount || !duration) return;
 
     setLoading(true);
     
@@ -54,21 +69,21 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
         // Simulate price with some volatility (random walk)
         const volatility = 0.02; // 2% volatility per period
         const randomFactor = 1 + (Math.random() - 0.5) * volatility;
-        const simulatedPrice = currentPrice * randomFactor * (1 + (i / totalPeriods) * 0.05); // slight upward trend
+        const simulatedPrice = stockToUse.price * randomFactor * (1 + (i / totalPeriods) * 0.05); // slight upward trend
         
         const shares = investmentAmount / simulatedPrice;
         totalShares += shares;
         totalInvested += investmentAmount;
         
         // Calculate dividends (quarterly payments)
-        if (dividendYield && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
-          const quarterlyDividendRate = (dividendYield / 100) / 4;
-          totalDividends += totalShares * currentPrice * quarterlyDividendRate;
+        if (stockToUse.dividendYield && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
+          const quarterlyDividendRate = stockToUse.dividendYield / 4;
+          totalDividends += totalShares * stockToUse.price * quarterlyDividendRate;
         }
       }
 
       const averagePrice = totalInvested / totalShares;
-      const currentValue = totalShares * currentPrice;
+      const currentValue = totalShares * stockToUse.price;
       const totalReturn = currentValue - totalInvested;
       const totalReturnPercent = (totalReturn / totalInvested) * 100;
       const totalReturnWithDividends = totalReturn + totalDividends;
@@ -91,10 +106,8 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('th-TH', {
-      style: 'currency',
-      currency: 'THB'
-    }).format(value);
+    const currency = selectedStock?.currency || (symbol?.includes('.BK') ? 'THB' : 'USD');
+    return YahooFinanceService.formatCurrency(value, currency);
   };
 
   const getFrequencyText = () => {
@@ -106,6 +119,14 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
     }
   };
 
+  const stockToDisplay = selectedStock || (symbol && currentPrice ? {
+    symbol,
+    name: symbol,
+    price: currentPrice,
+    dividendYield: dividendYield || 0,
+    currency: symbol.includes('.BK') ? 'THB' : 'USD'
+  } as StockData : null);
+
   return (
     <Card>
       <CardHeader>
@@ -114,10 +135,23 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
           จำลอง DCA (Dollar Cost Averaging)
         </CardTitle>
         <CardDescription>
-          คำนวณผลตอบแทนจากการลงทุนแบบ DCA {symbol && `สำหรับ ${symbol}`}
+          คำนวณผลตอบแทนจากการลงทุนแบบ DCA
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Stock Selection */}
+        {!symbol && (
+          <div className="space-y-2">
+            <Label>เลือกหุ้น</Label>
+            <StockSelector
+              value={selectedStock?.symbol || ""}
+              onValueChange={() => {}}
+              onStockSelect={handleStockSelect}
+              placeholder="ค้นหาและเลือกหุ้นเพื่อจำลอง DCA..."
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="amount">จำนวนเงินต่อครั้ง (บาท)</Label>
@@ -156,31 +190,39 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
           </div>
         </div>
 
-        {currentPrice && (
+        {stockToDisplay && (
           <div className="p-4 bg-muted/50 rounded-lg">
             <div className="text-sm text-muted-foreground mb-2">ข้อมูลหุ้น</div>
-            <div className="flex items-center justify-between">
-              <span>ราคาปัจจุบัน:</span>
-              <span className="font-semibold">{formatCurrency(currentPrice)}</span>
-            </div>
-            {dividendYield && (
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span>อัตราปันผล:</span>
-                <span className="font-semibold">{dividendYield.toFixed(2)}%</span>
+                <span className="font-semibold">{stockToDisplay.symbol}</span>
+                <Badge variant="outline">
+                  {stockToDisplay.symbol.includes('.BK') ? 'SET' : 'US'}
+                </Badge>
               </div>
-            )}
+              <div className="flex items-center justify-between">
+                <span>ราคาปัจจุบัน:</span>
+                <span className="font-semibold">{formatCurrency(stockToDisplay.price)}</span>
+              </div>
+              {stockToDisplay.dividendYield > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>อัตราปันผล:</span>
+                  <span className="font-semibold">{(stockToDisplay.dividendYield * 100).toFixed(2)}%</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         <Button 
           onClick={calculateDCA} 
-          disabled={loading || !currentPrice}
+          disabled={loading || !stockToDisplay}
           className="w-full"
         >
           {loading ? 'กำลังคำนวณ...' : 'คำนวณ DCA'}
         </Button>
 
-        {results && (
+        {results && stockToDisplay && (
           <div className="space-y-4">
             <Separator />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -254,7 +296,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
                 <p className="font-semibold mb-2">สรุปการลงทุน DCA:</p>
                 <p>
                   หากคุณลงทุน {formatCurrency(parseFloat(amount))} {getFrequencyText()} 
-                  เป็นเวลา {duration} เดือน ในหุ้น {symbol || 'นี้'} คุณจะได้:
+                  เป็นเวลา {duration} เดือน ในหุ้น {stockToDisplay.symbol} คุณจะได้:
                 </p>
                 <ul className="list-disc list-inside mt-2 space-y-1">
                   <li>หุ้นทั้งหมด: {results.totalShares.toFixed(4)} หุ้น</li>
