@@ -8,25 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Settings as SettingsIcon, User, Bell, Palette, Database } from "lucide-react";
+import { useSettings } from "@/hooks/useSettings";
 
 const Settings = () => {
   const { toast } = useToast();
-  const [settings, setSettings] = useState({
-    displayName: 'ผู้ใช้',
-    email: 'user@example.com',
-    notifications: {
-      priceAlerts: true,
-      dividendAlerts: true,
-      dcaReminders: false,
-      marketNews: true
-    },
-    theme: 'dark',
-    currency: 'THB',
-    commissionRate: 0.25,
-    refreshInterval: 30
-  });
+  const { settings, updateSettings } = useSettings();
 
   const handleSave = () => {
+    updateSettings(settings);
     toast({
       title: "บันทึกการตั้งค่าสำเร็จ",
       description: "การตั้งค่าของคุณถูกบันทึกแล้ว"
@@ -80,7 +69,7 @@ const Settings = () => {
                 <Input
                   id="displayName"
                   value={settings.displayName}
-                  onChange={(e) => setSettings(prev => ({ ...prev, displayName: e.target.value }))}
+                  onChange={(e) => updateSettings({ displayName: e.target.value })}
                 />
               </div>
               <div className="grid gap-2">
@@ -89,7 +78,7 @@ const Settings = () => {
                   id="email"
                   type="email"
                   value={settings.email}
-                  onChange={(e) => setSettings(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => updateSettings({ email: e.target.value })}
                 />
               </div>
               <Button onClick={handleSave}>บันทึกการเปลี่ยนแปลง</Button>
@@ -117,10 +106,9 @@ const Settings = () => {
                 <Switch
                   checked={settings.notifications.priceAlerts}
                   onCheckedChange={(checked) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      notifications: { ...prev.notifications, priceAlerts: checked }
-                    }))
+                    updateSettings({
+                      notifications: { ...settings.notifications, priceAlerts: checked }
+                    })
                   }
                 />
               </div>
@@ -134,10 +122,9 @@ const Settings = () => {
                 <Switch
                   checked={settings.notifications.dividendAlerts}
                   onCheckedChange={(checked) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      notifications: { ...prev.notifications, dividendAlerts: checked }
-                    }))
+                    updateSettings({
+                      notifications: { ...settings.notifications, dividendAlerts: checked }
+                    })
                   }
                 />
               </div>
@@ -151,10 +138,9 @@ const Settings = () => {
                 <Switch
                   checked={settings.notifications.dcaReminders}
                   onCheckedChange={(checked) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      notifications: { ...prev.notifications, dcaReminders: checked }
-                    }))
+                    updateSettings({
+                      notifications: { ...settings.notifications, dcaReminders: checked }
+                    })
                   }
                 />
               </div>
@@ -168,10 +154,9 @@ const Settings = () => {
                 <Switch
                   checked={settings.notifications.marketNews}
                   onCheckedChange={(checked) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      notifications: { ...prev.notifications, marketNews: checked }
-                    }))
+                    updateSettings({
+                      notifications: { ...settings.notifications, marketNews: checked }
+                    })
                   }
                 />
               </div>
@@ -194,7 +179,7 @@ const Settings = () => {
                 <Label htmlFor="theme">ธีม</Label>
                 <Select
                   value={settings.theme}
-                  onValueChange={(value) => setSettings(prev => ({ ...prev, theme: value }))}
+                  onValueChange={(value) => updateSettings({ theme: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -210,7 +195,7 @@ const Settings = () => {
                 <Label htmlFor="currency">สกุลเงินหลัก</Label>
                 <Select
                   value={settings.currency}
-                  onValueChange={(value) => setSettings(prev => ({ ...prev, currency: value }))}
+                  onValueChange={(value) => updateSettings({ currency: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -225,7 +210,7 @@ const Settings = () => {
                 <Label htmlFor="refreshInterval">ความถี่ในการอัพเดท (วินาที)</Label>
                 <Select
                   value={settings.refreshInterval.toString()}
-                  onValueChange={(value) => setSettings(prev => ({ ...prev, refreshInterval: parseInt(value) }))}
+                  onValueChange={(value) => updateSettings({ refreshInterval: parseInt(value) })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -262,7 +247,7 @@ const Settings = () => {
                   min="0"
                   max="5"
                   value={settings.commissionRate}
-                  onChange={(e) => setSettings(prev => ({ ...prev, commissionRate: parseFloat(e.target.value) || 0 }))}
+                  onChange={(e) => updateSettings({ commissionRate: parseFloat(e.target.value) || 0 })}
                 />
                 <p className="text-sm text-muted-foreground">
                   อัตราค่าคอมมิชชั่นที่โบรกเกอร์เรียกเก็บต่อการซื้อขาย

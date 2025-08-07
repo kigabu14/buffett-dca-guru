@@ -10,6 +10,7 @@ import { CalendarDays, Calculator, DollarSign, TrendingUp, Building2 } from 'luc
 import { YahooFinanceService } from '@/services/YahooFinanceService';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useSettings } from '@/hooks/useSettings';
 
 interface StockInvestment {
   id: string;
@@ -36,11 +37,14 @@ interface InvestmentFormProps {
 }
 
 export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: InvestmentFormProps) => {
+  const { settings } = useSettings();
   const [symbol, setSymbol] = useState(editingInvestment?.symbol || '');
   const [companyName, setCompanyName] = useState(editingInvestment?.company_name || '');
   const [quantity, setQuantity] = useState(editingInvestment?.quantity?.toString() || '');
   const [buyPrice, setBuyPrice] = useState(editingInvestment?.buy_price?.toString() || '');
-  const [commission, setCommission] = useState(editingInvestment?.commission?.toString() || '0');
+  const [commissionRate, setCommissionRate] = useState(
+    editingInvestment ? (editingInvestment.commission / (editingInvestment.quantity * editingInvestment.buy_price) * 100).toFixed(2) : settings.commissionRate.toString()
+  );
   const [purchaseDate, setPurchaseDate] = useState(
     editingInvestment?.purchase_date || new Date().toISOString().split('T')[0]
   );
@@ -92,18 +96,20 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
     return () => clearTimeout(debounceTimer);
   }, [symbol, market, editingInvestment]);
 
-  // Auto-calculate commission when quantity or price changes
-  useEffect(() => {
-    if (quantity && buyPrice && !editingInvestment) {
+  // Calculate commission based on percentage
+  const calculateCommission = () => {
+    if (quantity && buyPrice && commissionRate) {
       const totalValue = parseFloat(quantity) * parseFloat(buyPrice);
-      const calculatedCommission = totalValue * 0.0025; // 0.25% commission
-      setCommission(calculatedCommission.toFixed(2));
+      return totalValue * (parseFloat(commissionRate) / 100);
     }
-  }, [quantity, buyPrice, editingInvestment]);
+    return 0;
+  };
+
+  const commission = calculateCommission();
 
   // Calculate totals
   const totalCost = quantity && buyPrice ? 
-    (parseFloat(quantity) * parseFloat(buyPrice)) + parseFloat(commission || '0') : 0;
+    (parseFloat(quantity) * parseFloat(buyPrice)) + commission : 0;
   
   const currentValue = quantity && stockData?.price ? 
     parseFloat(quantity) * stockData.price : 0;
@@ -123,7 +129,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
       company_name: companyName || null,
       quantity: parseFloat(quantity),
       buy_price: parseFloat(buyPrice),
-      commission: parseFloat(commission || '0'),
+      commission: commission,
       purchase_date: purchaseDate,
       market,
       dividend_received: parseFloat(dividendReceived || '0'),
@@ -131,6 +137,8 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
         parseFloat(dividendYieldAtPurchase) / 100 : null,
       notes: notes || null,
       current_price: stockData?.price || parseFloat(buyPrice),
+      ex_dividend_date: stockData?.exDividendDate || null,
+      dividend_rate: stockData?.dividendRate || 0,
     };
 
     console.log('Investment form submitting clean data:', data);
@@ -191,12 +199,17 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
                 <p className="text-sm text-muted-foreground">{stockData.market} • {stockData.currency}</p>
               </div>
               <div className="text-right">
-                <div className="text-lg font-bold">
-                  ฿{stockData.price?.toFixed(2)}
-                </div>
-                <div className={`text-sm ${stockData.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {stockData.changePercent >= 0 ? '+' : ''}{stockData.changePercent?.toFixed(2)}%
-                </div>
+                        <div className="text-lg font-bold">
+                          ฿{stockData.price?.toFixed(2)}
+                        </div>
+                        <div className={`text-sm ${stockData.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {stockData.changePercent >= 0 ? '+' : ''}{stockData.changePercent?.toFixed(2)}%
+                        </div>
+                        {stockData.exDividendDate && (
+                          <div className="text-xs text-muted-foreground">
+                            Ex-Div: {new Date(stockData.exDividendDate).toLocaleDateString('th-TH')}
+                          </div>
+                        )}
               </div>
             </div>
           </div>
@@ -234,16 +247,20 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="commission">ค่าธรรมเนียม</Label>
+            <Label htmlFor="commissionRate">ค่าธรรมเนียม (%)</Label>
             <Input
-              id="commission"
+              id="commissionRate"
               type="number"
-              value={commission}
-              onChange={(e) => setCommission(e.target.value)}
-              placeholder="0.00"
+              value={commissionRate}
+              onChange={(e) => setCommissionRate(e.target.value)}
+              placeholder="0.15"
               min="0"
               step="0.01"
+              max="5"
             />
+            <p className="text-xs text-muted-foreground">
+              ค่าธรรมเนียม: ฿{commission.toFixed(2)}
+            </p>
           </div>
           
           <div className="space-y-2">
@@ -282,6 +299,11 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
               min="0"
               step="0.01"
             />
+            {stockData?.dividendRate && (
+              <p className="text-xs text-muted-foreground">
+                อัตราปันผลปัจจุบัน: {(stockData.dividendYield * 100).toFixed(2)}%
+              </p>
+            )}
           </div>
         </div>
 
@@ -304,7 +326,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
             </div>
             <div className="flex justify-between">
               <span>ค่าธรรมเนียม:</span>
-              <span>฿{parseFloat(commission || '0').toLocaleString()}</span>
+              <span>฿{commission.toFixed(2)} ({commissionRate}%)</span>
             </div>
             <div className="flex justify-between font-semibold">
               <span>ต้นทุนรวม:</span>
