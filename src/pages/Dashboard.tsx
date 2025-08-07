@@ -235,12 +235,14 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>ราคาซื้อ:</span>
-                      <span>{stock.market === 'SET' ? '฿' : '$'}{stock.buy_price.toFixed(2)}</span>
+                      <span>
+                        {(stock.symbol.includes('.BK') || stock.market === 'SET') ? '฿' : '$'}{stock.buy_price.toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>ราคาปัจจุบัน:</span>
                       <span className="font-medium">
-                        {stock.market === 'SET' ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
+                        {(stock.symbol.includes('.BK') || stock.market === 'SET') ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
                       </span>
                     </div>
                     <RealTimeStockPrice 
