@@ -69,7 +69,7 @@ export class YahooFinanceService {
           symbol: stockData.symbol,
           name: stockData.company_name || stockData.name || symbol,
           market: stockData.market,
-          currency: symbol.includes('.BK') || stockData.market === 'SET' ? 'THB' : 'USD',
+          currency: symbol.includes('.BK') ? 'THB' : 'USD',
           price: stockData.current_price || 0,
           change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
           changePercent: stockData.previous_close ? 
