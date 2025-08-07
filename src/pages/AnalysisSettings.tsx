@@ -1,319 +1,426 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useAnalysisSettings, AnalysisWeights } from '@/hooks/useAnalysisSettings';
-import { Settings, Save, Trash2, Star, TrendingUp, Shield, DollarSign } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { Settings, Target, TrendingUp, Brain, Save } from 'lucide-react';
+
+interface AnalysisWeights {
+  roe: number;
+  debtToEquity: number;
+  profitMargin: number;
+  operatingMargin: number;
+  currentRatio: number;
+  peRatio: number;
+  dividendYield: number;
+  epsGrowth: number;
+}
+
+interface AnalysisSettingsData {
+  id?: string;
+  name: string;
+  weights: AnalysisWeights;
+  is_default: boolean;
+}
 
 const AnalysisSettings = () => {
   const { toast } = useToast();
-  const {
-    settings,
-    currentSettings,
-    loading,
-    saveSettings,
-    updateSettings,
-    deleteSettings,
-    setAsDefault,
-    setCurrentSettings,
-    getPresetWeights,
-    defaultBuffettWeights,
-    customPresets
-  } = useAnalysisSettings();
-
-  const [newSettingsName, setNewSettingsName] = useState('');
-  const [editingWeights, setEditingWeights] = useState<AnalysisWeights>(currentSettings.weights);
-  const [selectedPreset, setSelectedPreset] = useState<string>('');
-
-  const criteriaInfo = [
-    { key: 'roe', label: 'ROE (Return on Equity)', icon: TrendingUp, description: 'ผลตอบแทนต่อส่วนของเจ้าของ' },
-    { key: 'debtEquity', label: 'Debt to Equity Ratio', icon: Shield, description: 'อัตราส่วนหนี้สินต่อส่วนของเจ้าของ' },
-    { key: 'netProfitMargin', label: 'Net Profit Margin', icon: DollarSign, description: 'อัตรากำไรสุทธิ' },
-    { key: 'freeCashFlow', label: 'Free Cash Flow', icon: DollarSign, description: 'กระแสเงินสดอิสระ' },
-    { key: 'epsGrowth', label: 'EPS Growth', icon: TrendingUp, description: 'การเติบโตของกำไรต่อหุ้น' },
-    { key: 'operatingMargin', label: 'Operating Margin', icon: DollarSign, description: 'อัตรากำไรจากการดำเนินงาน' },
-    { key: 'currentRatio', label: 'Current Ratio', icon: Shield, description: 'อัตราส่วนสภาพคล่อง' },
-    { key: 'shareDilution', label: 'Share Dilution', icon: Shield, description: 'การเจือจางหุ้น' },
-    { key: 'roa', label: 'ROA (Return on Assets)', icon: TrendingUp, description: 'ผลตอบแทนต่อสินทรัพย์' },
-    { key: 'moat', label: 'Economic Moat', icon: Shield, description: 'คูเศรษฐกิจ' },
-    { key: 'management', label: 'Management Quality', icon: Star, description: 'คุณภาพผู้บริหาร' }
-  ];
-
-  const handleWeightChange = (key: keyof AnalysisWeights, value: number[]) => {
-    setEditingWeights(prev => ({
-      ...prev,
-      [key]: value[0]
-    }));
-  };
-
-  const handlePresetSelect = (presetName: string) => {
-    if (presetName === 'buffett') {
-      setEditingWeights(defaultBuffettWeights);
-    } else if (presetName in customPresets) {
-      setEditingWeights(getPresetWeights(presetName as keyof typeof customPresets));
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [settings, setSettings] = useState<AnalysisSettingsData[]>([]);
+  const [currentSetting, setCurrentSetting] = useState<AnalysisSettingsData>({
+    name: 'การตั้งค่าใหม่',
+    is_default: false,
+    weights: {
+      roe: 20,
+      debtToEquity: 15,
+      profitMargin: 15,
+      operatingMargin: 10,
+      currentRatio: 10,
+      peRatio: 10,
+      dividendYield: 10,
+      epsGrowth: 10
     }
-    setSelectedPreset(presetName);
-  };
+  });
 
-  const handleSaveSettings = async () => {
-    if (!newSettingsName.trim()) {
-      toast({
-        title: "ข้อผิดพลาด",
-        description: "กรุณาใส่ชื่อการตั้งค่า",
-        variant: "destructive"
-      });
-      return;
+  useEffect(() => {
+    if (user) {
+      fetchSettings();
     }
+  }, [user]);
+
+  const fetchSettings = async () => {
+    if (!user) return;
 
     try {
-      await saveSettings({
-        name: newSettingsName,
-        weights: editingWeights,
-        is_default: false
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('analysis_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setSettings((data || []).map(item => ({
+        ...item,
+        weights: item.weights as unknown as AnalysisWeights
+      })));
+      
+      // Load default setting if available
+      const defaultSetting = data?.find(s => s.is_default);
+      if (defaultSetting) {
+        setCurrentSetting({
+          ...defaultSetting,
+          weights: defaultSetting.weights as unknown as AnalysisWeights
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching analysis settings:', error);
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถโหลดการตั้งค่าได้",
+        variant: "destructive"
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSetting = async () => {
+    if (!user) return;
+
+    try {
+      setSaveLoading(true);
+      
+      const settingData = {
+        user_id: user.id,
+        name: currentSetting.name,
+        weights: currentSetting.weights as any,
+        is_default: currentSetting.is_default
+      };
+
+      let error;
+      if (currentSetting.id) {
+        // Update existing setting
+        const { error: updateError } = await supabase
+          .from('analysis_settings')
+          .update(settingData)
+          .eq('id', currentSetting.id);
+        error = updateError;
+      } else {
+        // Create new setting
+        const { error: insertError } = await supabase
+          .from('analysis_settings')
+          .insert([settingData]);
+        error = insertError;
+      }
+
+      if (error) throw error;
 
       toast({
         title: "บันทึกสำเร็จ",
         description: "การตั้งค่าการวิเคราะห์ถูกบันทึกแล้ว"
       });
 
-      setNewSettingsName('');
+      await fetchSettings();
     } catch (error) {
+      console.error('Error saving analysis settings:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถบันทึกการตั้งค่าได้",
         variant: "destructive"
       });
+    } finally {
+      setSaveLoading(false);
     }
   };
 
-  const handleDeleteSettings = async (id: string) => {
-    try {
-      await deleteSettings(id);
-      toast({
-        title: "ลบสำเร็จ",
-        description: "การตั้งค่าถูกลบแล้ว"
-      });
-    } catch (error) {
-      toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถลบการตั้งค่าได้",
-        variant: "destructive"
-      });
-    }
+  const loadSetting = (setting: AnalysisSettingsData) => {
+    setCurrentSetting(setting);
   };
 
-  const handleSetDefault = async (id: string) => {
-    try {
-      await setAsDefault(id);
-      toast({
-        title: "ตั้งเป็นค่าเริ่มต้นสำเร็จ",
-        description: "การตั้งค่านี้จะถูกใช้เป็นค่าเริ่มต้น"
-      });
-    } catch (error) {
-      toast({
-        title: "เกิดข้อผิดพลาด",
-        description: "ไม่สามารถตั้งเป็นค่าเริ่มต้นได้",
-        variant: "destructive"
-      });
-    }
+  const resetToDefault = () => {
+    setCurrentSetting({
+      name: 'Buffett Style (Default)',
+      is_default: true,
+      weights: {
+        roe: 25,
+        debtToEquity: 20,
+        profitMargin: 15,
+        operatingMargin: 10,
+        currentRatio: 10,
+        peRatio: 10,
+        dividendYield: 5,
+        epsGrowth: 5
+      }
+    });
   };
 
-  const totalWeight = Object.values(editingWeights).reduce((sum, weight) => sum + weight, 0);
+  const updateWeight = (key: keyof AnalysisWeights, value: number) => {
+    setCurrentSetting(prev => ({
+      ...prev,
+      weights: {
+        ...prev.weights,
+        [key]: value
+      }
+    }));
+  };
+
+  const getTotalWeight = () => {
+    return Object.values(currentSetting.weights).reduce((sum, weight) => sum + weight, 0);
+  };
+
+  const normalizeWeights = () => {
+    const total = getTotalWeight();
+    if (total === 100) return;
+
+    const factor = 100 / total;
+    const normalizedWeights = Object.entries(currentSetting.weights).reduce((acc, [key, value]) => {
+      acc[key as keyof AnalysisWeights] = Math.round(value * factor);
+      return acc;
+    }, {} as AnalysisWeights);
+
+    setCurrentSetting(prev => ({
+      ...prev,
+      weights: normalizedWeights
+    }));
+
+    toast({
+      title: "ปรับสัดส่วนแล้ว",
+      description: "น้ำหนักทั้งหมดถูกปรับให้เท่ากับ 100%"
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="text-center">กำลังโหลด...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold bg-gradient-premium bg-clip-text text-transparent">
-          ตั้งค่าการวิเคราะห์ Custom
-        </h1>
-        <p className="text-muted-foreground">
-          ปรับน้ำหนักของ 11 หลักการวิเคราะห์ตามสไตล์การลงทุนของคุณ
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-premium bg-clip-text text-transparent">
+            ตั้งค่าการวิเคราะห์
+          </h1>
+          <p className="text-muted-foreground">
+            ปรับแต่งน้ำหนักการวิเคราะห์ตามสไตล์การลงทุนของคุณ
+          </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={resetToDefault}>
+            <Target className="mr-2 h-4 w-4" />
+            Buffett Style
+          </Button>
+          <Button 
+            onClick={saveSetting} 
+            disabled={saveLoading}
+            className="bg-gradient-premium hover:shadow-gold"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {saveLoading ? 'กำลังบันทึก...' : 'บันทึก'}
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="weights" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="weights">ปรับน้ำหนัก</TabsTrigger>
-          <TabsTrigger value="saved">การตั้งค่าที่บันทึก</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="weights" className="space-y-6">
-          {/* Preset Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                เลือกแบบสำเร็จรูป
-              </CardTitle>
-              <CardDescription>
-                เลือกสไตล์การลงทุนเพื่อเป็นจุดเริ่มต้น
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={selectedPreset} onValueChange={handlePresetSelect}>
-                <SelectTrigger>
-                  <SelectValue placeholder="เลือกแบบสำเร็จรูป" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="buffett">Buffett Default (แบบดั้งเดิม)</SelectItem>
-                  <SelectItem value="Conservative">Conservative (เน้นความปลอดภัย)</SelectItem>
-                  <SelectItem value="Growth Focused">Growth Focused (เน้นการเติบโต)</SelectItem>
-                  <SelectItem value="Value Investing">Value Investing (เน้นหาหุ้นถูก)</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-          {/* Weight Adjustment */}
-          <Card>
-            <CardHeader>
-              <CardTitle>ปรับน้ำหนักการวิเคราะห์</CardTitle>
-              <CardDescription>
-                น้ำหนักรวม: {totalWeight} คะแนน
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {criteriaInfo.map((criteria) => {
-                const IconComponent = criteria.icon;
-                const weight = editingWeights[criteria.key as keyof AnalysisWeights];
-                const percentage = totalWeight > 0 ? (weight / totalWeight * 100).toFixed(1) : '0';
-                
-                return (
-                  <div key={criteria.key} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <IconComponent className="h-4 w-4 text-primary" />
-                        <div>
-                          <Label className="font-medium">{criteria.label}</Label>
-                          <p className="text-xs text-muted-foreground">{criteria.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{percentage}%</Badge>
-                        <span className="text-sm font-medium min-w-[40px] text-center">
-                          {weight}
-                        </span>
-                      </div>
-                    </div>
-                    <Slider
-                      value={[weight]}
-                      onValueChange={(value) => handleWeightChange(criteria.key as keyof AnalysisWeights, value)}
-                      max={20}
-                      min={0}
-                      step={1}
-                      className="w-full"
-                    />
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          {/* Save Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>บันทึกการตั้งค่า</CardTitle>
-              <CardDescription>
-                บันทึกการตั้งค่าน้ำหนักปัจจุบันเพื่อใช้ในอนาคต
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="ชื่อการตั้งค่า เช่น My Custom Strategy"
-                  value={newSettingsName}
-                  onChange={(e) => setNewSettingsName(e.target.value)}
-                  className="flex-1"
-                />
-                <Button 
-                  onClick={handleSaveSettings}
-                  className="bg-gradient-premium hover:shadow-gold"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  บันทึก
-                </Button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Settings List */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              การตั้งค่าที่บันทึกไว้
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {settings.map((setting) => (
+              <div
+                key={setting.id}
+                className={`p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors ${
+                  currentSetting.id === setting.id ? 'bg-primary/10 border-primary' : ''
+                }`}
+                onClick={() => loadSetting(setting)}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{setting.name}</span>
+                  {setting.is_default && (
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                      ค่าเริ่มต้น
+                    </span>
+                  )}
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            ))}
+          </CardContent>
+        </Card>
 
-        <TabsContent value="saved" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>การตั้งค่าที่บันทึกไว้</CardTitle>
-              <CardDescription>
-                จัดการการตั้งค่าการวิเคราะห์ที่บันทึกไว้
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-4">กำลังโหลด...</div>
-              ) : settings.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">
-                  ยังไม่มีการตั้งค่าที่บันทึกไว้
+        {/* Weight Configuration */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              {currentSetting.name}
+            </CardTitle>
+            <CardDescription>
+              ปรับน้ำหนักของแต่ละปัจจัยในการวิเคราะห์ (รวม: {getTotalWeight()}%)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="basic" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="basic">ปัจจัยพื้นฐาน</TabsTrigger>
+                <TabsTrigger value="advanced">ปัจจัยขั้นสูง</TabsTrigger>
+                <TabsTrigger value="general">ทั่วไป</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basic" className="space-y-6">
+                <div className="space-y-2">
+                  <Label>ROE (Return on Equity): {currentSetting.weights.roe}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.roe]}
+                    onValueChange={(value) => updateWeight('roe', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {settings.map((setting) => (
-                    <div
-                      key={setting.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
+
+                <div className="space-y-2">
+                  <Label>Debt to Equity Ratio: {currentSetting.weights.debtToEquity}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.debtToEquity]}
+                    onValueChange={(value) => updateWeight('debtToEquity', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Profit Margin: {currentSetting.weights.profitMargin}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.profitMargin]}
+                    onValueChange={(value) => updateWeight('profitMargin', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Operating Margin: {currentSetting.weights.operatingMargin}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.operatingMargin]}
+                    onValueChange={(value) => updateWeight('operatingMargin', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="advanced" className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Current Ratio: {currentSetting.weights.currentRatio}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.currentRatio]}
+                    onValueChange={(value) => updateWeight('currentRatio', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>P/E Ratio: {currentSetting.weights.peRatio}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.peRatio]}
+                    onValueChange={(value) => updateWeight('peRatio', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Dividend Yield: {currentSetting.weights.dividendYield}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.dividendYield]}
+                    onValueChange={(value) => updateWeight('dividendYield', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>EPS Growth: {currentSetting.weights.epsGrowth}%</Label>
+                  <Slider
+                    value={[currentSetting.weights.epsGrowth]}
+                    onValueChange={(value) => updateWeight('epsGrowth', value[0])}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="general" className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="setting-name">ชื่อการตั้งค่า</Label>
+                  <Input
+                    id="setting-name"
+                    value={currentSetting.name}
+                    onChange={(e) => setCurrentSetting(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is-default"
+                    checked={currentSetting.is_default}
+                    onCheckedChange={(checked) => setCurrentSetting(prev => ({ ...prev, is_default: checked }))}
+                  />
+                  <Label htmlFor="is-default">ตั้งเป็นค่าเริ่มต้น</Label>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span>น้ำหนักรวม:</span>
+                    <span className={`font-bold ${getTotalWeight() === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                      {getTotalWeight()}%
+                    </span>
+                  </div>
+                  
+                  {getTotalWeight() !== 100 && (
+                    <Button
+                      variant="outline"
+                      onClick={normalizeWeights}
+                      className="w-full"
                     >
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <div className="font-medium">{setting.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            น้ำหนักรวม: {Object.values(setting.weights).reduce((sum, w) => sum + w, 0)} คะแนน
-                          </div>
-                        </div>
-                        {setting.is_default && (
-                          <Badge className="bg-gradient-premium">ค่าเริ่มต้น</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingWeights(setting.weights);
-                            setCurrentSettings(setting);
-                          }}
-                        >
-                          ใช้งาน
-                        </Button>
-                        {!setting.is_default && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSetDefault(setting.id!)}
-                          >
-                            <Star className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteSettings(setting.id!)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                      ปรับสัดส่วนให้เท่ากับ 100%
+                    </Button>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

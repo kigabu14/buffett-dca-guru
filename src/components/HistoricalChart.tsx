@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { YahooFinanceService } from "@/services/YahooFinanceService";
-import { Loader2, TrendingUp } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { YahooFinanceService } from '@/services/YahooFinanceService';
+import { RefreshCw, TrendingUp } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface HistoricalChartProps {
   symbol: string;
@@ -17,85 +18,85 @@ interface ChartDataPoint {
   volume: number;
 }
 
-export const HistoricalChart = ({ symbol, className = "" }: HistoricalChartProps) => {
+export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, className }) => {
+  const { toast } = useToast();
   const [data, setData] = useState<ChartDataPoint[]>([]);
   const [loading, setLoading] = useState(false);
-  const [period, setPeriod] = useState("1mo");
-  const [interval, setInterval] = useState("1d");
-
-  const periods = [
-    { value: "1mo", label: "1 เดือน" },
-    { value: "3mo", label: "3 เดือน" },
-    { value: "6mo", label: "6 เดือน" },
-    { value: "1y", label: "1 ปี" },
-    { value: "2y", label: "2 ปี" },
-    { value: "5y", label: "5 ปี" }
-  ];
-
-  const intervals = [
-    { value: "1d", label: "รายวัน" },
-    { value: "1wk", label: "รายสัปดาห์" },
-    { value: "1mo", label: "รายเดือน" }
-  ];
+  const [period, setPeriod] = useState('1mo');
+  const [interval, setInterval] = useState('1d');
 
   const fetchHistoricalData = async () => {
-    if (!symbol) return;
-    
-    setLoading(true);
     try {
+      setLoading(true);
       const historicalData = await YahooFinanceService.getHistoricalData(symbol, period, interval);
-      setData(historicalData);
+      
+      const chartData = historicalData.map(point => ({
+        date: new Date(point.date).toLocaleDateString('th-TH'),
+        price: point.price,
+        volume: point.volume
+      }));
+      
+      setData(chartData);
     } catch (error) {
-      console.error("Error fetching historical data:", error);
-      // Generate sample data for demo
-      const sampleData = generateSampleData(symbol, period);
+      console.error('Error fetching historical data:', error);
+      
+      // Generate sample data for demonstration
+      const sampleData = generateSampleData();
       setData(sampleData);
+      
+      toast({
+        title: "ใช้ข้อมูลตัวอย่าง",
+        description: "ไม่สามารถดึงข้อมูลจริงได้ กำลังแสดงข้อมูลตัวอย่าง",
+        variant: "default"
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const generateSampleData = (symbol: string, period: string): ChartDataPoint[] => {
-    const now = new Date();
-    const basePrice = symbol.includes('.BK') ? 50 : 150;
-    const points = period === '1mo' ? 30 : period === '3mo' ? 90 : period === '6mo' ? 180 : 365;
+  const generateSampleData = (): ChartDataPoint[] => {
+    const basePrice = 100;
+    const points = period === '1d' ? 24 : period === '5d' ? 120 : period === '1mo' ? 30 : 252;
     
     return Array.from({ length: points }, (_, i) => {
-      const date = new Date(now);
-      date.setDate(date.getDate() - (points - i));
+      const volatility = 0.02;
+      const trend = 0.001;
+      const randomChange = (Math.random() - 0.5) * volatility;
+      const price = basePrice * (1 + trend * i + randomChange);
       
-      const variation = (Math.random() - 0.5) * 0.1;
-      const trendFactor = i / points * 0.2;
-      const price = basePrice * (1 + trendFactor + variation);
+      const date = new Date();
+      if (period === '1d') {
+        date.setHours(date.getHours() - (points - i));
+      } else {
+        date.setDate(date.getDate() - (points - i));
+      }
       
       return {
-        date: date.toISOString().split('T')[0],
-        price: Math.round(price * 100) / 100,
+        date: date.toLocaleDateString('th-TH'),
+        price: Math.max(price, 1),
         volume: Math.floor(Math.random() * 1000000) + 100000
       };
     });
   };
 
   useEffect(() => {
-    fetchHistoricalData();
+    if (symbol) {
+      fetchHistoricalData();
+    }
   }, [symbol, period, interval]);
 
   const formatTooltipValue = (value: number, name: string) => {
     if (name === 'price') {
-      return [YahooFinanceService.formatCurrency(value), 'ราคา'];
+      return [value.toFixed(2), 'ราคา'];
     }
     if (name === 'volume') {
-      return [YahooFinanceService.formatLargeNumber(value), 'ปริมาณ'];
+      return [value.toLocaleString(), 'ปริมาณ'];
     }
     return [value, name];
   };
 
   const formatXAxisLabel = (tickItem: string) => {
-    const date = new Date(tickItem);
-    return date.toLocaleDateString('th-TH', { 
-      day: '2-digit', 
-      month: '2-digit' 
-    });
+    return tickItem;
   };
 
   return (
@@ -105,90 +106,124 @@ export const HistoricalChart = ({ symbol, className = "" }: HistoricalChartProps
           <div>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              กราฟราคาประวัติศาสตร์
+              กราฟราคาย้อนหลัง - {symbol}
             </CardTitle>
             <CardDescription>
-              กราฟแสดงการเปลี่ยนแปลงราคาของ {symbol}
+              แนวโน้มราคาและปริมาณการซื้อขาย
             </CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {periods.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={interval} onValueChange={setInterval}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {intervals.map((i) => (
-                  <SelectItem key={i.value} value={i.value}>
-                    {i.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchHistoricalData}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+        
+        <div className="flex gap-2">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1d">1 วัน</SelectItem>
+              <SelectItem value="5d">5 วัน</SelectItem>
+              <SelectItem value="1mo">1 เดือน</SelectItem>
+              <SelectItem value="3mo">3 เดือน</SelectItem>
+              <SelectItem value="6mo">6 เดือน</SelectItem>
+              <SelectItem value="1y">1 ปี</SelectItem>
+              <SelectItem value="2y">2 ปี</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={interval} onValueChange={setInterval}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1m">1 นาที</SelectItem>
+              <SelectItem value="5m">5 นาที</SelectItem>
+              <SelectItem value="15m">15 นาที</SelectItem>
+              <SelectItem value="30m">30 นาที</SelectItem>
+              <SelectItem value="1h">1 ชั่วโมง</SelectItem>
+              <SelectItem value="1d">1 วัน</SelectItem>
+              <SelectItem value="1wk">1 สัปดาห์</SelectItem>
+              <SelectItem value="1mo">1 เดือน</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </CardHeader>
+      
       <CardContent>
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="ml-2">กำลังโหลดข้อมูล...</span>
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+              <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
+            </div>
           </div>
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="date" 
+                  tick={{ fontSize: 12 }}
                   tickFormatter={formatXAxisLabel}
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
                 />
                 <YAxis 
+                  tick={{ fontSize: 12 }}
                   domain={['dataMin - 5', 'dataMax + 5']}
-                  tickFormatter={(value) => YahooFinanceService.formatCurrency(value)}
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
                 />
                 <Tooltip 
                   formatter={formatTooltipValue}
-                  labelFormatter={(label) => `วันที่: ${new Date(label).toLocaleDateString('th-TH')}`}
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--popover))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
+                  labelStyle={{ color: '#000' }}
+                  contentStyle={{ 
+                    backgroundColor: '#fff', 
+                    border: '1px solid #ccc',
+                    borderRadius: '6px'
                   }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="price" 
-                  stroke="hsl(var(--primary))" 
+                  stroke="#2563eb" 
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, fill: 'hsl(var(--primary))' }}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
-        <div className="mt-4 flex justify-center">
-          <Button variant="outline" size="sm" onClick={fetchHistoricalData} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            รีเฟรชข้อมูล
-          </Button>
-        </div>
+        
+        {data.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">ราคาเริ่มต้น: </span>
+              <span className="font-medium">฿{data[0]?.price.toFixed(2)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">ราคาปัจจุบัน: </span>
+              <span className="font-medium">฿{data[data.length - 1]?.price.toFixed(2)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">สูงสุด: </span>
+              <span className="font-medium text-green-600">
+                ฿{Math.max(...data.map(d => d.price)).toFixed(2)}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">ต่ำสุด: </span>
+              <span className="font-medium text-red-600">
+                ฿{Math.min(...data.map(d => d.price)).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
