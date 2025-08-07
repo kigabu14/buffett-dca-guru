@@ -8,6 +8,7 @@ interface PortfolioSummaryProps {
   totalGainLoss: number;
   totalCostBasis: number;
   totalDividends: number;
+  totalUSDValue?: number;
 }
 
 export const PortfolioSummary = ({ 
@@ -15,7 +16,8 @@ export const PortfolioSummary = ({
   investmentsCount, 
   totalGainLoss, 
   totalCostBasis,
-  totalDividends 
+  totalDividends,
+  totalUSDValue 
 }: PortfolioSummaryProps) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -29,6 +31,11 @@ export const PortfolioSummary = ({
           </div>
           <p className="text-xs text-muted-foreground">
             จาก {investmentsCount} หุ้น
+            {totalUSDValue && totalUSDValue > 0 && (
+              <span className="block text-primary font-medium">
+                มูลค่าหุ้น USA: ${totalUSDValue.toLocaleString()}
+              </span>
+            )}
           </p>
         </CardContent>
       </Card>

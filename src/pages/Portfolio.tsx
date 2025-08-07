@@ -256,12 +256,42 @@ const Portfolio = () => {
     return costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
   };
 
-  // Calculate portfolio totals
-  const totalPortfolioValue = investments.reduce((sum, inv) => sum + calculateTotalValue(inv), 0);
-  const totalCostBasis = investments.reduce((sum, inv) => 
-    sum + (inv.quantity * inv.buy_price) + inv.commission, 0);
+  // Exchange rate for USD to THB (you might want to fetch this from an API)
+  const USD_TO_THB = 35.5; // Example rate, you can make this dynamic
+
+  // Calculate portfolio totals with USD conversion
+  const totalPortfolioValue = investments.reduce((sum, inv) => {
+    const value = calculateTotalValue(inv);
+    if (inv.market === 'NASDAQ' || inv.market === 'NYSE') {
+      return sum + (value * USD_TO_THB);
+    }
+    return sum + value;
+  }, 0);
+  
+  const totalCostBasis = investments.reduce((sum, inv) => {
+    const cost = (inv.quantity * inv.buy_price) + inv.commission;
+    if (inv.market === 'NASDAQ' || inv.market === 'NYSE') {
+      return sum + (cost * USD_TO_THB);
+    }
+    return sum + cost;
+  }, 0);
+  
   const totalGainLoss = totalPortfolioValue - totalCostBasis;
-  const totalDividends = investments.reduce((sum, inv) => sum + inv.dividend_received, 0);
+  const totalDividends = investments.reduce((sum, inv) => {
+    const dividend = inv.dividend_received;
+    if (inv.market === 'NASDAQ' || inv.market === 'NYSE') {
+      return sum + (dividend * USD_TO_THB);
+    }
+    return sum + dividend;
+  }, 0);
+
+  // Calculate USD amounts for display
+  const totalUSDValue = investments.reduce((sum, inv) => {
+    if (inv.market === 'NASDAQ' || inv.market === 'NYSE') {
+      return sum + calculateTotalValue(inv);
+    }
+    return sum;
+  }, 0);
 
   if (loading) {
     return (
@@ -351,6 +381,7 @@ const Portfolio = () => {
             totalGainLoss={totalGainLoss}
             totalCostBasis={totalCostBasis}
             totalDividends={totalDividends}
+            totalUSDValue={totalUSDValue}
           />
         </div>
 
