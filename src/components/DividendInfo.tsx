@@ -1,7 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, TrendingUp, DollarSign } from "lucide-react";
+import { CalendarDays, TrendingUp, DollarSign, BarChart3, Activity } from "lucide-react";
 import { StockData, YahooFinanceService } from "@/services/YahooFinanceService";
 
 interface DividendInfoProps {
@@ -19,40 +19,38 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
     return YahooFinanceService.formatCurrency(rate, currency);
   };
 
+  const formatPriceRange = (low: number, high: number, currency: string) => {
+    if (low <= 0 || high <= 0) return '-';
+    return `${YahooFinanceService.formatCurrency(low, currency)} - ${YahooFinanceService.formatCurrency(high, currency)}`;
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <DollarSign className="h-5 w-5" />
-          ข้อมูลเงินปันผล
+          ข้อมูลเงินปันผลและราคา
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">อัตราปันผลต่อปี</div>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="font-semibold text-lg">
-                {formatDividendYield(stock.dividendYield)}
-              </span>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">เงินปันผลต่อหุ้นต่อปี</div>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-blue-600" />
-              <span className="font-semibold text-lg">
-                {formatDividendRate(stock.dividendRate, stock.currency)}
-              </span>
-            </div>
+      <CardContent className="space-y-6">
+        {/* Forward Dividend & Yield */}
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">Forward Dividend & Yield</div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-green-600" />
+            <span className="font-semibold text-lg">
+              {stock.forwardDividendYield > 0 ? 
+                `${formatDividendRate(stock.dividendRate, stock.currency)} (${formatDividendYield(stock.forwardDividendYield)})` : 
+                formatDividendRate(stock.dividendRate, stock.currency) + ' (' + formatDividendYield(stock.dividendYield) + ')'
+              }
+            </span>
           </div>
         </div>
 
+        {/* Date Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
           <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">วัน XD (Ex-Dividend)</div>
+            <div className="text-sm text-muted-foreground">Ex-Dividend Date</div>
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-orange-600" />
               <span className="font-medium">
@@ -65,12 +63,12 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
           </div>
           
           <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">วันจ่ายเงินปันผล</div>
+            <div className="text-sm text-muted-foreground">Earnings Date</div>
             <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-purple-600" />
+              <CalendarDays className="h-4 w-4 text-blue-600" />
               <span className="font-medium">
-                {stock.dividendDate ? 
-                  YahooFinanceService.formatDate(stock.dividendDate) : 
+                {stock.earningsDate ? 
+                  YahooFinanceService.formatDate(stock.earningsDate) : 
                   'ไม่มีข้อมูล'
                 }
               </span>
@@ -78,6 +76,30 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
           </div>
         </div>
 
+        {/* Price Ranges */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">52 Week Range</div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-purple-600" />
+              <span className="font-medium">
+                {formatPriceRange(stock.weekLow52, stock.weekHigh52, stock.currency)}
+              </span>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">Day's Range</div>
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-indigo-600" />
+              <span className="font-medium">
+                {formatPriceRange(stock.dayLow, stock.dayHigh, stock.currency)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Status Information */}
         {stock.dividendYield > 0 && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg">
             <div className="text-sm">

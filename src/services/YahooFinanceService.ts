@@ -17,6 +17,10 @@ export interface StockData {
   dividendRate: number;
   exDividendDate: string | null;
   dividendDate: string | null;
+  earningsDate: string | null;
+  forwardDividendYield: number;
+  dayHigh: number;
+  dayLow: number;
   weekHigh52: number;
   weekLow52: number;
   volume: number;
@@ -77,8 +81,12 @@ export class YahooFinanceService {
           dividendRate: stockData.dividend_rate || 0,
           exDividendDate: stockData.ex_dividend_date || null,
           dividendDate: stockData.dividend_date || null,
-          weekHigh52: 0,
-          weekLow52: 0,
+          earningsDate: stockData.earnings_date || null,
+          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
+          dayHigh: stockData.day_high || 0,
+          dayLow: stockData.day_low || 0,
+          weekHigh52: stockData.week_high_52 || 0,
+          weekLow52: stockData.week_low_52 || 0,
           volume: stockData.volume || 0,
           roe: stockData.roe || 0,
           debtToEquity: stockData.debt_to_equity || 0,
@@ -127,8 +135,12 @@ export class YahooFinanceService {
           dividendRate: stockData.dividend_rate || 0,
           exDividendDate: stockData.ex_dividend_date || null,
           dividendDate: stockData.dividend_date || null,
-          weekHigh52: 0,
-          weekLow52: 0,
+          earningsDate: stockData.earnings_date || null,
+          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
+          dayHigh: stockData.day_high || 0,
+          dayLow: stockData.day_low || 0,
+          weekHigh52: stockData.week_high_52 || 0,
+          weekLow52: stockData.week_low_52 || 0,
           volume: stockData.volume || 0,
           roe: stockData.roe || 0,
           debtToEquity: stockData.debt_to_equity || 0,
