@@ -11,6 +11,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { InvestmentForm } from '@/components/InvestmentForm';
 import { PortfolioSummary } from '@/components/PortfolioSummary';
+import { DividendCalendar } from '@/components/DividendCalendar';
+import { PortfolioPieChart } from '@/components/PortfolioPieChart';
 import { Separator } from '@/components/ui/separator';
 
 interface StockInvestment {
@@ -386,6 +388,17 @@ const Portfolio = () => {
         </div>
 
         <Separator className="my-8" />
+
+        {/* Charts and Calendar Section */}
+        {investments.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <PortfolioPieChart investments={investments} />
+              <DividendCalendar />
+            </div>
+            <Separator className="my-8" />
+          </>
+        )}
 
         {/* Holdings Table with enhanced design */}
         <Card className="border-border/50 bg-card/50 backdrop-blur-lg shadow-2xl">

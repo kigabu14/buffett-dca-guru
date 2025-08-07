@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { Calendar, DollarSign, TrendingUp, Clock } from 'lucide-react';
+import { format, isAfter, isBefore, parseISO, addDays } from 'date-fns';
+import { th } from 'date-fns/locale';
 
 interface XDEvent {
   id: string;
   symbol: string;
   ex_dividend_date: string;
-  record_date: string | null;
   payment_date: string | null;
   dividend_amount: number;
   dividend_yield: number | null;
@@ -20,7 +21,7 @@ interface UserStock {
   quantity: number;
 }
 
-const DividendCalendar = () => {
+export const DividendCalendar = () => {
   const { user } = useAuth();
   const [xdEvents, setXdEvents] = useState<XDEvent[]>([]);
   const [userStocks, setUserStocks] = useState<UserStock[]>([]);
@@ -33,87 +34,70 @@ const DividendCalendar = () => {
   }, [user]);
 
   const fetchData = async () => {
-    if (!user) return;
-
     try {
       setLoading(true);
-
-      // Fetch user's stocks
-      const { data: investments, error: investmentsError } = await supabase
+      
+      // Fetch user's stock investments
+      const { data: stocksData, error: stocksError } = await supabase
         .from('stock_investments')
         .select('symbol, quantity')
-        .eq('user_id', user.id);
+        .eq('user_id', user?.id);
 
-      if (investmentsError) {
-        console.error('Error fetching investments:', investmentsError);
-        return;
-      }
+      if (stocksError) throw stocksError;
+      setUserStocks(stocksData || []);
 
-      // Group by symbol and sum quantities
-      const stockMap = new Map<string, number>();
-      investments?.forEach(inv => {
-        const current = stockMap.get(inv.symbol) || 0;
-        stockMap.set(inv.symbol, current + inv.quantity);
-      });
-
-      const stocks = Array.from(stockMap.entries()).map(([symbol, quantity]) => ({
-        symbol,
-        quantity
-      }));
-      setUserStocks(stocks);
-
-      if (stocks.length > 0) {
-        // Fetch XD calendar for user's stocks
-        const symbols = stocks.map(s => s.symbol);
+      if (stocksData && stocksData.length > 0) {
+        const symbols = stocksData.map(stock => stock.symbol);
+        
+        // Fetch upcoming XD events for user's stocks
         const { data: xdData, error: xdError } = await supabase
           .from('xd_calendar')
           .select('*')
           .in('symbol', symbols)
           .gte('ex_dividend_date', new Date().toISOString().split('T')[0])
           .order('ex_dividend_date', { ascending: true })
-          .limit(20);
+          .limit(10);
 
-        if (xdError) {
-          console.error('Error fetching XD calendar:', xdError);
-        } else {
-          setXdEvents(xdData || []);
-        }
+        if (xdError) throw xdError;
+        setXdEvents(xdData || []);
       }
     } catch (error) {
-      console.error('Error fetching dividend calendar data:', error);
+      console.error('Error fetching dividend data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateExpectedDividend = (symbol: string, dividendAmount: number) => {
-    const stock = userStocks.find(s => s.symbol === symbol);
-    return stock ? stock.quantity * dividendAmount : 0;
+  const calculateExpectedDividend = (symbol: string, dividendAmount: number): number => {
+    const userStock = userStocks.find(stock => stock.symbol === symbol);
+    return userStock ? userStock.quantity * dividendAmount : 0;
   };
 
   const getDateStatus = (exDividendDate: string) => {
+    const xdDate = parseISO(exDividendDate);
     const today = new Date();
-    const exDate = new Date(exDividendDate);
-    const diffDays = Math.ceil((exDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const threeDaysFromNow = addDays(today, 3);
 
-    if (diffDays < 0) return { status: 'past', color: 'secondary', text: 'ผ่านไปแล้ว' };
-    if (diffDays === 0) return { status: 'today', color: 'destructive', text: 'วันนี้' };
-    if (diffDays <= 7) return { status: 'soon', color: 'default', text: `อีก ${diffDays} วัน` };
-    return { status: 'future', color: 'outline', text: `อีก ${diffDays} วัน` };
+    if (isBefore(xdDate, today)) {
+      return { status: 'past', color: 'bg-gray-100 text-gray-600', label: 'ผ่านแล้ว' };
+    } else if (isBefore(xdDate, threeDaysFromNow)) {
+      return { status: 'imminent', color: 'bg-yellow-100 text-yellow-800', label: 'ใกล้จะถึง' };
+    } else {
+      return { status: 'upcoming', color: 'bg-green-100 text-green-800', label: 'กำลังจะมา' };
+    }
   };
 
   if (loading) {
     return (
-      <Card className="border-border/50 bg-card/50 backdrop-blur">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            ปฏิทิน XD
+            ปฏิทินเงินปันผล
           </CardTitle>
-          <CardDescription>วันจ่ายเงินปันผลของหุ้นในพอร์ต</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center text-muted-foreground">กำลังโหลด...</div>
+          <div className="text-center py-6">กำลังโหลดข้อมูล...</div>
         </CardContent>
       </Card>
     );
@@ -121,17 +105,16 @@ const DividendCalendar = () => {
 
   if (userStocks.length === 0) {
     return (
-      <Card className="border-border/50 bg-card/50 backdrop-blur">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            ปฏิทิน XD
+            ปฏิทินเงินปันผล
           </CardTitle>
-          <CardDescription>วันจ่ายเงินปันผลของหุ้นในพอร์ต</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center text-muted-foreground">
-            ยังไม่มีหุ้นในพอร์ต กรุณาเพิ่มหุ้นก่อน
+          <div className="text-center py-6 text-muted-foreground">
+            ไม่มีหุ้นในพอร์ต กรุณาเพิ่มหุ้นก่อนดูปฏิทินเงินปันผล
           </div>
         </CardContent>
       </Card>
@@ -139,71 +122,76 @@ const DividendCalendar = () => {
   }
 
   return (
-    <Card className="border-border/50 bg-card/50 backdrop-blur">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Calendar className="h-5 w-5" />
-          ปฏิทิน XD
+          ปฏิทินเงินปันผล
         </CardTitle>
-        <CardDescription>วันจ่ายเงินปันผลของหุ้นในพอร์ต</CardDescription>
+        <p className="text-sm text-muted-foreground">
+          วันปันผลของหุ้นในพอร์ตของคุณ
+        </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {xdEvents.length > 0 ? (
-          xdEvents.map((event) => {
-            const dateStatus = getDateStatus(event.ex_dividend_date);
-            const expectedDividend = calculateExpectedDividend(event.symbol, event.dividend_amount);
-            
-            return (
-              <div key={event.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border/20">
-                <div className="flex items-center space-x-4">
-                  <div className="text-center">
-                    <div className="font-bold text-lg">{new Date(event.ex_dividend_date).getDate()}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(event.ex_dividend_date).toLocaleDateString('th-TH', { month: 'short' })}
+      <CardContent>
+        {xdEvents.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground">
+            ไม่มีข้อมูลเงินปันผลสำหรับหุ้นในพอร์ตของคุณ
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {xdEvents.map((event) => {
+              const dateStatus = getDateStatus(event.ex_dividend_date);
+              const expectedDividend = calculateExpectedDividend(event.symbol, event.dividend_amount);
+              
+              return (
+                <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant="outline" className="font-medium">
+                        {event.symbol}
+                      </Badge>
+                      <Badge className={dateStatus.color}>
+                        {dateStatus.label}
+                      </Badge>
                     </div>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-lg">{event.symbol}</div>
-                    <div className="text-sm text-muted-foreground">
-                      เงินปันผล ฿{event.dividend_amount.toFixed(2)} ต่อหุ้น
-                    </div>
-                    {event.dividend_yield && (
-                      <div className="text-xs text-muted-foreground">
-                        Yield: {event.dividend_yield.toFixed(2)}%
+                    
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>วัน XD: {format(parseISO(event.ex_dividend_date), 'dd MMM yyyy', { locale: th })}</span>
                       </div>
-                    )}
+                      
+                      {event.payment_date && (
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <span>วันจ่าย: {format(parseISO(event.payment_date), 'dd MMM yyyy', { locale: th })}</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <span>อัตราปันผล: ฿{event.dividend_amount} ต่อหุ้น</span>
+                        {event.dividend_yield && (
+                          <span className="text-green-600">({event.dividend_yield.toFixed(2)}%)</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="text-right space-y-1">
-                  <Badge variant={dateStatus.color as any} className="text-xs">
-                    {dateStatus.text}
-                  </Badge>
-                  {expectedDividend > 0 && (
-                    <div className="flex items-center text-sm font-semibold text-primary">
-                      <DollarSign className="h-3 w-3 mr-1" />
+                  
+                  <div className="text-right">
+                    <div className="text-lg font-semibold text-primary">
                       ฿{expectedDividend.toLocaleString()}
                     </div>
-                  )}
-                  <div className="text-xs text-muted-foreground">
-                    XD: {new Date(event.ex_dividend_date).toLocaleDateString('th-TH')}
-                  </div>
-                  {event.payment_date && (
                     <div className="text-xs text-muted-foreground">
-                      จ่าย: {new Date(event.payment_date).toLocaleDateString('th-TH')}
+                      ปันผลที่คาดว่าจะได้รับ
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="text-center text-muted-foreground">
-            ไม่มีข้อมูลเงินปันผลที่จะมาถึง
+              );
+            })}
           </div>
         )}
       </CardContent>
     </Card>
   );
 };
-
-export default DividendCalendar;

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TrendingUp, Brain, RefreshCw, Target, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import DividendCalendar from '@/components/DividendCalendar';
+import { DividendCalendar } from '@/components/DividendCalendar';
 
 interface BuffettAnalysis {
   id: string;
