@@ -50,6 +50,8 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
 
   const change = stockData.change;
   const changePercent = stockData.changePercent;
+  
+  // Proper gain/loss calculation using the same currency
   const gainLoss = buyPrice ? (stockData.price - buyPrice) : 0;
   const gainLossPercent = buyPrice ? ((stockData.price - buyPrice) / buyPrice) * 100 : 0;
 
@@ -85,7 +87,9 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
         {buyPrice && (
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
-            <span>{gainLoss >= 0 ? '+' : ''}{gainLoss.toFixed(2)}</span>
+            <span>
+              {gainLoss >= 0 ? '+' : ''}{YahooFinanceService.formatCurrency(Math.abs(gainLoss), stockData.currency)}
+            </span>
             <span>({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)</span>
           </div>
         )}

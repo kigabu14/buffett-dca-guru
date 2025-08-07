@@ -43,11 +43,32 @@ const Dashboard = () => {
     try {
       const { data, error } = await supabase
         .from('stock_investments')
-        .select('symbol, company_name, quantity, buy_price, current_price')
+        .select('symbol, company_name, quantity, buy_price, current_price, market')
         .eq('user_id', user.id);
 
       if (error) throw error;
-      setUserStocks(data || []);
+      
+      // Fetch current prices from Yahoo Finance for accurate calculation
+      if (data && data.length > 0) {
+        const symbols = [...new Set(data.map(stock => stock.symbol))];
+        try {
+          const stockPrices = await YahooFinanceService.getStocks(symbols);
+          const priceMap = new Map(stockPrices.map(s => [s.symbol, s.price]));
+          
+          // Update stocks with current prices
+          const updatedStocks = data.map(stock => ({
+            ...stock,
+            current_price_yahoo: priceMap.get(stock.symbol) || stock.current_price || stock.buy_price
+          }));
+          
+          setUserStocks(updatedStocks);
+        } catch (error) {
+          console.error('Error fetching current prices:', error);
+          setUserStocks(data || []);
+        }
+      } else {
+        setUserStocks([]);
+      }
     } catch (error) {
       console.error('Error fetching user stocks:', error);
     }
@@ -214,7 +235,13 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>ราคาซื้อ:</span>
-                      <span>฿{stock.buy_price.toFixed(2)}</span>
+                      <span>{stock.market === 'SET' ? '฿' : '$'}{stock.buy_price.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>ราคาปัจจุบัน:</span>
+                      <span className="font-medium">
+                        {stock.market === 'SET' ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
+                      </span>
                     </div>
                     <RealTimeStockPrice 
                       symbol={stock.symbol} 
