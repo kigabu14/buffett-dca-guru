@@ -53,7 +53,11 @@ const Compare = () => {
   ];
 
   const formatValue = (value: any, format: string, currency: string = 'USD') => {
-    if (value === null || value === undefined || value === 0) return '-';
+    if (value === null || value === undefined) return '-';
+    
+    // Don't treat 0 as invalid for certain metrics
+    const allowZero = ['change', 'changePercent'].includes(format);
+    if (!allowZero && value === 0) return '-';
     
     switch (format) {
       case 'currency':
@@ -61,7 +65,9 @@ const Compare = () => {
       case 'change':
         return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
       case 'percent':
-        return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%`;
+        // Handle percentage values that might already be in decimal form
+        const percentValue = value > 1 ? value : value * 100;
+        return `${percentValue >= 0 ? '+' : ''}${percentValue.toFixed(2)}%`;
       case 'number':
         return YahooFinanceService.formatLargeNumber(value);
       case 'decimal':
@@ -80,7 +86,8 @@ const Compare = () => {
   const getBestValue = (metric: string) => {
     if (selectedStocks.length === 0) return null;
     
-    const values = selectedStocks.map(s => s[metric as keyof StockData] as number).filter(v => v != null && v !== 0);
+    const values = selectedStocks.map(s => s[metric as keyof StockData] as number)
+      .filter(v => v != null && v !== undefined && !isNaN(v));
     if (values.length === 0) return null;
     
     // For most metrics, higher is better, but for P/E ratio, lower might be better
@@ -200,7 +207,7 @@ const Compare = () => {
                         <TableCell className="font-medium">{metric.label}</TableCell>
                         {selectedStocks.map((stock) => {
                           const value = stock[metric.key as keyof StockData] as number;
-                          const isBest = value === bestValue && value != null && value !== 0;
+                          const isBest = value === bestValue && value != null && value !== undefined && !isNaN(value);
                           const colorClass = ['change', 'changePercent'].includes(metric.key) 
                             ? getChangeColor(value) 
                             : '';
@@ -211,7 +218,7 @@ const Compare = () => {
                               className={`text-center ${colorClass} ${isBest ? 'font-bold bg-green-50' : ''}`}
                             >
                               {formatValue(value, metric.format, stock.currency)}
-                              {isBest && value != null && value !== 0 && (
+                              {isBest && value != null && value !== undefined && !isNaN(value) && (
                                 <TrendingUp className="inline h-3 w-3 ml-1 text-green-600" />
                               )}
                             </TableCell>

@@ -1,197 +1,156 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.53.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-interface FinancialData {
-  symbol: string;
-  revenue: number;
-  netIncome: number;
-  totalAssets: number;
-  totalEquity: number;
-  totalDebt: number;
-  operatingIncome: number;
-  freeCashFlow: number;
-  eps: number;
-  sharesOutstanding: number;
-  currentAssets: number;
-  currentLiabilities: number;
-}
-
-interface BuffettScore {
-  roe_score: number;
-  debt_equity_ratio_score: number;
-  net_profit_margin_score: number;
-  free_cash_flow_score: number;
-  eps_growth_score: number;
-  operating_margin_score: number;
-  current_ratio_score: number;
-  share_dilution_score: number;
-  roa_score: number;
-  moat_score: number;
-  management_score: number;
-  recommendation: 'DCA_MORE' | 'HOLD' | 'REDUCE_SELL';
-}
-
-// ดึงข้อมูลทางการเงินจาก Yahoo Finance
-async function fetchFinancialData(symbol: string): Promise<FinancialData | null> {
-  try {
-    console.log(`Fetching financial data for ${symbol}...`);
-    
-    // Try multiple Yahoo Finance endpoints
-    const endpoints = [
-      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=financialData,balanceSheetHistory,incomeStatementHistory,cashflowStatementHistory`,
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=financialData,balanceSheetHistory,incomeStatementHistory,cashflowStatementHistory`
-    ];
-    
-    let data = null;
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetch(endpoint, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          data = await response.json();
-          break;
-        }
-        console.log(`Endpoint ${endpoint} failed with status: ${response.status}`);
-      } catch (err) {
-        console.log(`Endpoint ${endpoint} failed:`, err.message);
-      }
-    }
-    
-    if (!data) {
-      console.log(`All endpoints failed for ${symbol}`);
-      return null;
-    }
-
-    // Parse ข้อมูลจาก Yahoo Finance API
-    const quoteSummary = data.quoteSummary?.result?.[0];
-    if (!quoteSummary) {
-      console.log(`No quote summary found for ${symbol}`);
-      return null;
-    }
-
-    const balanceSheet = quoteSummary.balanceSheetHistory?.balanceSheetStatements?.[0] || {};
-    const incomeStatement = quoteSummary.incomeStatementHistory?.incomeStatements?.[0] || {};
-    const cashFlow = quoteSummary.cashflowStatementHistory?.cashflowStatements?.[0] || {};
-    const financialDataRaw = quoteSummary.financialData || {};
-
-    console.log(`Successfully fetched data for ${symbol}`);
-
-    return {
-      symbol,
-      revenue: incomeStatement.totalRevenue?.raw || 0,
-      netIncome: incomeStatement.netIncome?.raw || 0,
-      totalAssets: balanceSheet.totalAssets?.raw || 0,
-      totalEquity: balanceSheet.totalStockholderEquity?.raw || 0,
-      totalDebt: balanceSheet.totalDebt?.raw || 0,
-      operatingIncome: incomeStatement.operatingIncome?.raw || 0,
-      freeCashFlow: cashFlow.freeCashFlow?.raw || 0,
-      eps: financialDataRaw.trailingEps?.raw || 0,
-      sharesOutstanding: financialDataRaw.sharesOutstanding?.raw || 0,
-      currentAssets: balanceSheet.totalCurrentAssets?.raw || 0,
-      currentLiabilities: balanceSheet.totalCurrentLiabilities?.raw || 0,
-    };
-  } catch (error) {
-    console.error(`Error fetching financial data for ${symbol}:`, error);
-    return null;
-  }
-}
-
-// คำนวณคะแนน Buffett ตาม 11 เกณฑ์
-function calculateBuffettScore(data: FinancialData): BuffettScore {
-  // 1. ROE > 15% (คะแนน 1-5)
-  const roe = data.totalEquity > 0 ? (data.netIncome / data.totalEquity) * 100 : 0;
-  const roe_score = roe >= 20 ? 5 : roe >= 17.5 ? 4 : roe >= 15 ? 3 : roe >= 10 ? 2 : 1;
-
-  // 2. D/E Ratio < 1 (คะแนน 1-5)
-  const deRatio = data.totalEquity > 0 ? data.totalDebt / data.totalEquity : 0;
-  const debt_equity_ratio_score = deRatio <= 0.3 ? 5 : deRatio <= 0.5 ? 4 : deRatio <= 1 ? 3 : deRatio <= 1.5 ? 2 : 1;
-
-  // 3. Net Profit Margin > 15% (คะแนน 1-5)
-  const netProfitMargin = data.revenue > 0 ? (data.netIncome / data.revenue) * 100 : 0;
-  const net_profit_margin_score = netProfitMargin >= 20 ? 5 : netProfitMargin >= 17.5 ? 4 : netProfitMargin >= 15 ? 3 : netProfitMargin >= 10 ? 2 : 1;
-
-  // 4. Free Cash Flow > 0 (คะแนน 1-5)
-  const free_cash_flow_score = data.freeCashFlow > data.revenue * 0.1 ? 5 : 
-                              data.freeCashFlow > data.revenue * 0.05 ? 4 :
-                              data.freeCashFlow > 0 ? 3 : 
-                              data.freeCashFlow > -data.revenue * 0.05 ? 2 : 1;
-
-  // 5. EPS Growth (สำหรับ demo ใช้คะแนนกลาง)
-  const eps_growth_score = 3;
-
-  // 6. Operating Margin > 20% (คะแนน 1-5)
-  const operatingMargin = data.revenue > 0 ? (data.operatingIncome / data.revenue) * 100 : 0;
-  const operating_margin_score = operatingMargin >= 25 ? 5 : operatingMargin >= 22.5 ? 4 : operatingMargin >= 20 ? 3 : operatingMargin >= 15 ? 2 : 1;
-
-  // 7. Current Ratio > 1.5 (คะแนน 1-5)
-  const currentRatio = data.currentLiabilities > 0 ? data.currentAssets / data.currentLiabilities : 0;
-  const current_ratio_score = currentRatio >= 2.5 ? 5 : currentRatio >= 2 ? 4 : currentRatio >= 1.5 ? 3 : currentRatio >= 1 ? 2 : 1;
-
-  // 8. Share Dilution (สำหรับ demo ใช้คะแนนกลาง)
-  const share_dilution_score = 3;
-
-  // 9. ROA > 7% (คะแนน 1-5)
-  const roa = data.totalAssets > 0 ? (data.netIncome / data.totalAssets) * 100 : 0;
-  const roa_score = roa >= 12 ? 5 : roa >= 9 ? 4 : roa >= 7 ? 3 : roa >= 4 ? 2 : 1;
-
-  // 10. Moat (สำหรับ demo ใช้คะแนนกลาง)
-  const moat_score = 3;
-
-  // 11. Management (สำหรับ demo ใช้คะแนนกลาง)
-  const management_score = 3;
-
-  // คำนวณคะแนนรวมและคำแนะนำ
-  const totalScore = roe_score + debt_equity_ratio_score + net_profit_margin_score + 
-                    free_cash_flow_score + eps_growth_score + operating_margin_score + 
-                    current_ratio_score + share_dilution_score + roa_score + 
-                    moat_score + management_score;
-
-  let recommendation: 'DCA_MORE' | 'HOLD' | 'REDUCE_SELL';
-  if (totalScore >= 40) {
-    recommendation = 'DCA_MORE';
-  } else if (totalScore >= 30) {
-    recommendation = 'HOLD';
+// Buffett analysis based on Warren Buffett investment principles
+function calculateBuffettAnalysis(stockData: any) {
+  let score = 0;
+  const criteria = [];
+  
+  // Extract financial metrics with defaults
+  const pe = stockData.pe || stockData.pe_ratio || 15;
+  const roe = stockData.roe || stockData.returnOnEquity || 0.15;
+  const debtToEquity = stockData.debtToEquity || stockData.debt_to_equity || 0.5;
+  const profitMargin = stockData.profitMargin || stockData.profit_margin || 0.15;
+  const operatingMargin = stockData.operatingMargin || stockData.operating_margin || 0.20;
+  const currentRatio = stockData.currentRatio || stockData.current_ratio || 2.0;
+  const dividendYield = stockData.dividendYield || stockData.dividend_yield || 0.03;
+  const eps = stockData.eps || (stockData.current_price || stockData.price || 100) / pe;
+  const priceToBook = stockData.priceToBook || 1.5;
+  const revenueGrowth = stockData.revenueGrowth || 0.1;
+  
+  // 1. Return on Equity (ROE) > 15%
+  if (roe > 0.15) {
+    score += 2;
+    criteria.push({ name: 'ROE > 15%', status: 'pass', value: (roe * 100).toFixed(1) + '%', points: 2 });
+  } else if (roe > 0.10) {
+    score += 1;
+    criteria.push({ name: 'ROE > 15%', status: 'partial', value: (roe * 100).toFixed(1) + '%', points: 1 });
   } else {
-    recommendation = 'REDUCE_SELL';
+    criteria.push({ name: 'ROE > 15%', status: 'fail', value: (roe * 100).toFixed(1) + '%', points: 0 });
   }
-
+  
+  // 2. Debt to Equity < 0.5
+  if (debtToEquity > 0 && debtToEquity < 0.3) {
+    score += 2;
+    criteria.push({ name: 'Low Debt/Equity', status: 'pass', value: debtToEquity.toFixed(2), points: 2 });
+  } else if (debtToEquity > 0 && debtToEquity < 0.5) {
+    score += 1;
+    criteria.push({ name: 'Low Debt/Equity', status: 'partial', value: debtToEquity.toFixed(2), points: 1 });
+  } else {
+    criteria.push({ name: 'Low Debt/Equity', status: 'fail', value: debtToEquity.toFixed(2), points: 0 });
+  }
+  
+  // 3. Profit Margin > 15%
+  if (profitMargin > 0.15) {
+    score += 2;
+    criteria.push({ name: 'Profit Margin > 15%', status: 'pass', value: (profitMargin * 100).toFixed(1) + '%', points: 2 });
+  } else if (profitMargin > 0.10) {
+    score += 1;
+    criteria.push({ name: 'Profit Margin > 15%', status: 'partial', value: (profitMargin * 100).toFixed(1) + '%', points: 1 });
+  } else {
+    criteria.push({ name: 'Profit Margin > 15%', status: 'fail', value: (profitMargin * 100).toFixed(1) + '%', points: 0 });
+  }
+  
+  // 4. Operating Margin > 15%
+  if (operatingMargin > 0.15) {
+    score += 2;
+    criteria.push({ name: 'Operating Margin > 15%', status: 'pass', value: (operatingMargin * 100).toFixed(1) + '%', points: 2 });
+  } else if (operatingMargin > 0.10) {
+    score += 1;
+    criteria.push({ name: 'Operating Margin > 15%', status: 'partial', value: (operatingMargin * 100).toFixed(1) + '%', points: 1 });
+  } else {
+    criteria.push({ name: 'Operating Margin > 15%', status: 'fail', value: (operatingMargin * 100).toFixed(1) + '%', points: 0 });
+  }
+  
+  // 5. Current Ratio > 1.5
+  if (currentRatio > 1.5) {
+    score += 2;
+    criteria.push({ name: 'Current Ratio > 1.5', status: 'pass', value: currentRatio.toFixed(2), points: 2 });
+  } else if (currentRatio > 1.0) {
+    score += 1;
+    criteria.push({ name: 'Current Ratio > 1.5', status: 'partial', value: currentRatio.toFixed(2), points: 1 });
+  } else {
+    criteria.push({ name: 'Current Ratio > 1.5', status: 'fail', value: currentRatio.toFixed(2), points: 0 });
+  }
+  
+  // 6. P/E Ratio reasonable (< 20)
+  if (pe > 0 && pe < 15) {
+    score += 2;
+    criteria.push({ name: 'Reasonable P/E', status: 'pass', value: pe.toFixed(1), points: 2 });
+  } else if (pe > 0 && pe < 25) {
+    score += 1;
+    criteria.push({ name: 'Reasonable P/E', status: 'partial', value: pe.toFixed(1), points: 1 });
+  } else {
+    criteria.push({ name: 'Reasonable P/E', status: 'fail', value: pe.toFixed(1), points: 0 });
+  }
+  
+  // 7. Dividend yield (consistent dividend payments)
+  if (dividendYield > 0.02) {
+    score += 2;
+    criteria.push({ name: 'Dividend Yield > 2%', status: 'pass', value: (dividendYield * 100).toFixed(1) + '%', points: 2 });
+  } else if (dividendYield > 0) {
+    score += 1;
+    criteria.push({ name: 'Dividend Yield > 2%', status: 'partial', value: (dividendYield * 100).toFixed(1) + '%', points: 1 });
+  } else {
+    criteria.push({ name: 'Dividend Yield > 2%', status: 'fail', value: '0%', points: 0 });
+  }
+  
+  // 8. EPS positive
+  if (eps > 0) {
+    score += 1;
+    criteria.push({ name: 'Positive EPS', status: 'pass', value: eps.toFixed(2), points: 1 });
+  } else {
+    criteria.push({ name: 'Positive EPS', status: 'fail', value: eps.toFixed(2), points: 0 });
+  }
+  
+  // Determine recommendation
+  let recommendation = 'AVOID';
+  if (score >= 12) recommendation = 'STRONG_BUY';
+  else if (score >= 8) recommendation = 'BUY';
+  else if (score >= 5) recommendation = 'HOLD';
+  
   return {
-    roe_score,
-    debt_equity_ratio_score,
-    net_profit_margin_score,
-    free_cash_flow_score,
-    eps_growth_score,
-    operating_margin_score,
-    current_ratio_score,
-    share_dilution_score,
-    roa_score,
-    moat_score,
-    management_score,
-    recommendation
+    symbol: stockData.symbol,
+    total_score: score,
+    max_score: 15,
+    recommendation: recommendation,
+    criteria: criteria,
+    analysis_date: new Date().toISOString(),
+    
+    // Store individual metrics for reference
+    roe: roe,
+    debt_to_equity: debtToEquity,
+    profit_margin: profitMargin,
+    operating_margin: operatingMargin,
+    current_ratio: currentRatio,
+    pe_ratio: pe,
+    dividend_yield: dividendYield,
+    eps: eps,
+    price_to_book: priceToBook,
+    revenue_growth: revenueGrowth
   };
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { symbol } = await req.json();
+    const body = await req.json();
+    const { symbol, stockData } = body;
     
-    if (!symbol) {
+    if (!symbol || !stockData) {
       return new Response(
-        JSON.stringify({ error: 'Symbol is required' }),
+        JSON.stringify({ 
+          error: 'Symbol and stock data are required',
+          message: 'กรุณาส่งข้อมูล symbol และ stockData'
+        }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -199,72 +158,36 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Analyzing Buffett score for:', symbol);
-
-    // ดึงข้อมูลทางการเงิน
-    const financialData = await fetchFinancialData(symbol);
+    console.log(`Analyzing ${symbol} with Buffett criteria`);
     
-    if (!financialData) {
-      return new Response(
-        JSON.stringify({ error: 'Unable to fetch financial data for symbol' }),
-        { 
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
-    // คำนวณคะแนน Buffett
-    const buffettScore = calculateBuffettScore(financialData);
-
-    // เชื่อมต่อ Supabase
+    // Perform Buffett analysis
+    const analysis = calculateBuffettAnalysis(stockData);
+    
+    // Connect to Supabase and save analysis
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // คำนวณคะแนนรวม
-    const totalScore = buffettScore.roe_score + buffettScore.debt_equity_ratio_score + 
-                      buffettScore.net_profit_margin_score + buffettScore.free_cash_flow_score + 
-                      buffettScore.eps_growth_score + buffettScore.operating_margin_score + 
-                      buffettScore.current_ratio_score + buffettScore.share_dilution_score + 
-                      buffettScore.roa_score + buffettScore.moat_score + buffettScore.management_score;
-
-    // บันทึกผลการวิเคราะห์
-    const analysisData = {
-      symbol,
-      analysis_date: new Date().toISOString().split('T')[0],
-      total_score: totalScore,
-      ...buffettScore,
-      roe_percentage: financialData.totalEquity > 0 ? (financialData.netIncome / financialData.totalEquity) * 100 : null,
-      debt_equity_ratio: financialData.totalEquity > 0 ? financialData.totalDebt / financialData.totalEquity : null,
-      net_profit_margin: financialData.revenue > 0 ? (financialData.netIncome / financialData.revenue) * 100 : null,
-      free_cash_flow: financialData.freeCashFlow,
-      eps_growth: null, // Will be calculated properly with historical data
-      operating_margin: financialData.revenue > 0 ? (financialData.operatingIncome / financialData.revenue) * 100 : null,
-      current_ratio: financialData.currentLiabilities > 0 ? financialData.currentAssets / financialData.currentLiabilities : null,
-      roa_percentage: financialData.totalAssets > 0 ? (financialData.netIncome / financialData.totalAssets) * 100 : null,
-      current_price: null // Will be fetched separately
-    };
-
+    // Save to buffett_analysis table
     const { error } = await supabase
       .from('buffett_analysis')
-      .upsert(analysisData, { 
-        onConflict: 'symbol,analysis_date',
+      .upsert(analysis, { 
+        onConflict: 'symbol',
         ignoreDuplicates: false 
       });
 
     if (error) {
-      console.error('Error saving analysis:', error);
-      throw error;
+      console.error(`Error saving analysis for ${symbol}:`, error);
+      // Continue anyway, return the analysis even if save fails
     }
 
-    console.log(`Successfully analyzed ${symbol} with total score: ${buffettScore.roe_score + buffettScore.debt_equity_ratio_score + buffettScore.net_profit_margin_score + buffettScore.free_cash_flow_score + buffettScore.eps_growth_score + buffettScore.operating_margin_score + buffettScore.current_ratio_score + buffettScore.share_dilution_score + buffettScore.roa_score + buffettScore.moat_score + buffettScore.management_score}`);
+    console.log(`Successfully analyzed ${symbol}: score=${analysis.total_score}, recommendation=${analysis.recommendation}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        symbol,
-        analysis: analysisData
+        data: analysis,
+        timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -274,8 +197,10 @@ Deno.serve(async (req) => {
     
     return new Response(
       JSON.stringify({ 
-        error: 'Failed to analyze stock',
-        details: error.message 
+        error: 'Internal server error',
+        message: 'เกิดข้อผิดพลาดในการวิเคราะห์',
+        details: error.message,
+        success: false
       }),
       { 
         status: 500,
