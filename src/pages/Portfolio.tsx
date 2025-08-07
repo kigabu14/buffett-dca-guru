@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, RefreshCw, TrendingUp, TrendingDown, Edit, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, TrendingUp, TrendingDown, Edit, Trash2, Sparkles, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { InvestmentForm } from '@/components/InvestmentForm';
 import { PortfolioSummary } from '@/components/PortfolioSummary';
+import { Separator } from '@/components/ui/separator';
 
 interface StockInvestment {
   id: string;
@@ -265,179 +266,256 @@ const Portfolio = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-premium bg-clip-text text-transparent">
-            พอร์ตการลงทุน
-          </h1>
-          <p className="text-muted-foreground">
-            จัดการและติดตามการลงทุนของคุณ
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
+      <div className="p-6 space-y-8 max-w-7xl mx-auto">
+        {/* Animated Header */}
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-premium rounded-3xl opacity-10 blur-xl"></div>
+          <Card className="relative border-border/50 bg-gradient-to-r from-card/80 to-muted/40 backdrop-blur-sm">
+            <CardContent className="p-8">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <BarChart3 className="h-8 w-8 text-primary" />
+                      <Sparkles className="h-4 w-4 text-yellow-500 absolute -top-1 -right-1 animate-pulse" />
+                    </div>
+                    <h1 className="text-4xl font-bold bg-gradient-premium bg-clip-text text-transparent">
+                      พอร์ตการลงทุน
+                    </h1>
+                  </div>
+                  <p className="text-lg text-muted-foreground">
+                    จัดการและติดตามการลงทุนอย่างชาญฉลาด
+                  </p>
+                  <div className="flex items-center gap-4 pt-2">
+                    <Badge variant="secondary" className="px-3 py-1">
+                      {investments.length} หุ้น
+                    </Badge>
+                    <Badge variant="outline" className="px-3 py-1">
+                      มูลค่า ฿{totalPortfolioValue.toLocaleString()}
+                    </Badge>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={refreshStockPrices}
+                    disabled={refreshing || investments.length === 0}
+                    className="group relative overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50 hover:shadow-lg transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <RefreshCw className={`mr-2 h-4 w-4 relative z-10 ${refreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
+                    <span className="relative z-10">อัพเดทราคา</span>
+                  </Button>
+                  
+                  <Dialog open={addDialogOpen} onOpenChange={(open) => {
+                    setAddDialogOpen(open);
+                    if (!open) {
+                      setEditingInvestment(null);
+                    }
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button className="group relative overflow-hidden bg-gradient-premium hover:shadow-gold transition-all duration-300">
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <Plus className="mr-2 h-4 w-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+                        <span className="relative z-10">เพิ่มหุ้น</span>
+                      </Button>
+                    </DialogTrigger>
+                    <InvestmentForm
+                      editingInvestment={editingInvestment}
+                      onSubmit={handleAddInvestment}
+                      onCancel={() => {
+                        setAddDialogOpen(false);
+                        setEditingInvestment(null);
+                      }}
+                    />
+                  </Dialog>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={refreshStockPrices}
-            disabled={refreshing || investments.length === 0}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            อัพเดทราคา
-          </Button>
-          
-          <Dialog open={addDialogOpen} onOpenChange={(open) => {
-            setAddDialogOpen(open);
-            if (!open) {
-              setEditingInvestment(null);
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button className="bg-gradient-premium hover:shadow-gold">
-                <Plus className="mr-2 h-4 w-4" />
-                เพิ่มหุ้น
-              </Button>
-            </DialogTrigger>
-            <InvestmentForm
-              editingInvestment={editingInvestment}
-              onSubmit={handleAddInvestment}
-              onCancel={() => {
-                setAddDialogOpen(false);
-                setEditingInvestment(null);
-              }}
-            />
-          </Dialog>
+
+        {/* Portfolio Summary with animations */}
+        <div className="transform transition-all duration-500 hover:scale-[1.02]">
+          <PortfolioSummary 
+            totalPortfolioValue={totalPortfolioValue}
+            investmentsCount={investments.length}
+            totalGainLoss={totalGainLoss}
+            totalCostBasis={totalCostBasis}
+            totalDividends={totalDividends}
+          />
         </div>
-      </div>
 
-      {/* Portfolio Summary */}
-      <PortfolioSummary 
-        totalPortfolioValue={totalPortfolioValue}
-        investmentsCount={investments.length}
-        totalGainLoss={totalGainLoss}
-        totalCostBasis={totalCostBasis}
-        totalDividends={totalDividends}
-      />
+        <Separator className="my-8" />
 
-      {/* Holdings Table */}
-      <Card className="border-border/50 bg-card/50 backdrop-blur">
-        <CardHeader>
-          <CardTitle>รายการถือครอง</CardTitle>
-          <CardDescription>
-            รายละเอียดหุ้นทั้งหมดในพอร์ต
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {investments.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-4">ยังไม่มีการลงทุนในพอร์ต</p>
-              <Button 
-                onClick={() => setAddDialogOpen(true)}
-                className="bg-gradient-premium hover:shadow-gold"
-              >
-                เพิ่มหุ้นแรกของคุณ
-              </Button>
+        {/* Holdings Table with enhanced design */}
+        <Card className="border-border/50 bg-card/50 backdrop-blur-lg shadow-2xl">
+          <CardHeader className="bg-gradient-to-r from-muted/50 to-background/50 rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl flex items-center gap-2">
+                  <TrendingUp className="h-6 w-6 text-green-600" />
+                  รายการถือครอง
+                </CardTitle>
+                <CardDescription className="text-base mt-1">
+                  รายละเอียดหุ้นทั้งหมดในพอร์ต • อัพเดทล่าสุด {new Date().toLocaleTimeString('th-TH')}
+                </CardDescription>
+              </div>
+              {investments.length > 0 && (
+                <Badge variant="outline" className="px-4 py-2 text-sm font-medium">
+                  {investments.length} รายการ
+                </Badge>
+              )}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>หุ้น</TableHead>
-                    <TableHead className="text-right">จำนวน</TableHead>
-                    <TableHead className="text-right">ราคาซื้อ</TableHead>
-                    <TableHead className="text-right">ราคาปัจจุบัน</TableHead>
-                    <TableHead className="text-right">มูลค่า</TableHead>
-                    <TableHead className="text-right">กำไร/ขาดทุน</TableHead>
-                    <TableHead className="text-right">%</TableHead>
-                    <TableHead className="text-center">จัดการ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {investments.map((investment) => {
-                    const currentValue = calculateTotalValue(investment);
-                    const gainLoss = calculateGainLoss(investment);
-                    const gainLossPercent = calculateGainLossPercentage(investment);
-                    const currentPrice = investment.current_price || investment.buy_price;
+          </CardHeader>
+          <CardContent className="p-0">
+            {investments.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="relative inline-block">
+                  <div className="w-20 h-20 rounded-full bg-gradient-premium opacity-20 absolute inset-0 animate-pulse"></div>
+                  <BarChart3 className="h-16 w-16 text-muted-foreground relative z-10 mx-auto mb-4" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">เริ่มต้นการลงทุนของคุณ</h3>
+                <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                  ยังไม่มีหุ้นในพอร์ต เพิ่มหุ้นแรกของคุณเพื่อเริ่มติดตามการลงทุน
+                </p>
+                <Button 
+                  onClick={() => setAddDialogOpen(true)}
+                  className="bg-gradient-premium hover:shadow-gold transform hover:scale-105 transition-all duration-300"
+                  size="lg"
+                >
+                  <Plus className="mr-2 h-5 w-5" />
+                  เพิ่มหุ้นแรกของคุณ
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30 hover:bg-muted/40">
+                        <TableHead className="font-semibold">หุ้น</TableHead>
+                        <TableHead className="text-right font-semibold">จำนวน</TableHead>
+                        <TableHead className="text-right font-semibold">ราคาซื้อ</TableHead>
+                        <TableHead className="text-right font-semibold">ราคาปัจจุบัน</TableHead>
+                        <TableHead className="text-right font-semibold">มูลค่า</TableHead>
+                        <TableHead className="text-right font-semibold">กำไร/ขาดทุน</TableHead>
+                        <TableHead className="text-right font-semibold">%</TableHead>
+                        <TableHead className="text-center font-semibold">จัดการ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {investments.map((investment, index) => {
+                        const currentValue = calculateTotalValue(investment);
+                        const gainLoss = calculateGainLoss(investment);
+                        const gainLossPercent = calculateGainLossPercentage(investment);
+                        const currentPrice = investment.current_price || investment.buy_price;
 
-                    return (
-                      <TableRow key={investment.id}>
-                        <TableCell>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 rounded-lg bg-gradient-premium flex items-center justify-center">
-                              <span className="text-sm font-bold text-primary-foreground">
-                                {investment.symbol.slice(0, 2)}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="font-semibold">{investment.symbol}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {investment.company_name}
+                        return (
+                          <TableRow 
+                            key={investment.id}
+                            className="group hover:bg-muted/30 transition-all duration-300 border-border/30"
+                            style={{ animationDelay: `${index * 100}ms` }}
+                          >
+                            <TableCell className="py-4">
+                              <div className="flex items-center space-x-4">
+                                <div className="relative">
+                                  <div className="w-12 h-12 rounded-xl bg-gradient-premium flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                                    <span className="text-sm font-bold text-primary-foreground">
+                                      {investment.symbol.slice(0, 2)}
+                                    </span>
+                                  </div>
+                                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-background border border-border rounded-full flex items-center justify-center">
+                                    <span className="text-xs font-medium">
+                                      {investment.market === 'SET' ? '🇹🇭' : '🇺🇸'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-semibold text-base">{investment.symbol}</div>
+                                  <div className="text-sm text-muted-foreground truncate">
+                                    {investment.company_name || 'ไม่ระบุชื่อบริษัท'}
+                                  </div>
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    {investment.market}
+                                  </Badge>
+                                </div>
                               </div>
-                              <Badge variant="outline" className="text-xs">
-                                {investment.market}
-                              </Badge>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {investment.quantity.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ฿{investment.buy_price.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end">
-                            ฿{currentPrice.toFixed(2)}
-                            {currentPrice !== investment.buy_price && (
-                              <div className={`ml-2 ${currentPrice > investment.buy_price ? 'text-green-500' : 'text-red-500'}`}>
-                                {currentPrice > investment.buy_price ? (
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {investment.quantity.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              ฿{investment.buy_price.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="font-medium">฿{currentPrice.toFixed(2)}</span>
+                                {currentPrice !== investment.buy_price && (
+                                  <div className={`p-1 rounded-full ${currentPrice > investment.buy_price ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                    {currentPrice > investment.buy_price ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-lg">
+                              ฿{currentValue.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={`text-right font-bold ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <div className="flex items-center justify-end gap-1">
+                                {gainLoss >= 0 ? '+' : ''}฿{Math.abs(gainLoss).toLocaleString()}
+                                {gainLoss >= 0 ? (
                                   <TrendingUp className="h-4 w-4" />
                                 ) : (
                                   <TrendingDown className="h-4 w-4" />
                                 )}
                               </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          ฿{currentValue.toLocaleString()}
-                        </TableCell>
-                        <TableCell className={`text-right font-semibold ${gainLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {gainLoss >= 0 ? '+' : ''}฿{gainLoss.toLocaleString()}
-                        </TableCell>
-                        <TableCell className={`text-right font-semibold ${gainLossPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center space-x-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditInvestment(investment)}
-                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => deleteInvestment(investment.id, investment.symbol)}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                            </TableCell>
+                            <TableCell className={`text-right font-bold ${gainLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <Badge 
+                                variant={gainLossPercent >= 0 ? "default" : "destructive"}
+                                className="font-bold"
+                              >
+                                {gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex justify-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditInvestment(investment)}
+                                  className="h-9 w-9 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteInvestment(investment.id, investment.symbol)}
+                                  className="h-9 w-9 p-0 text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
