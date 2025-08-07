@@ -38,35 +38,66 @@ interface BuffettScore {
 // ดึงข้อมูลทางการเงินจาก Yahoo Finance
 async function fetchFinancialData(symbol: string): Promise<FinancialData | null> {
   try {
-    // สำหรับ demo - ในการใช้งานจริงต้องใช้ API ที่ให้ข้อมูลทางการเงินเชิงลึก
-    // เช่น Alpha Vantage, Financial Modeling Prep, หรือ IEX Cloud
+    console.log(`Fetching financial data for ${symbol}...`);
     
-    const response = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=financialData,balanceSheetHistory,incomeStatementHistory,cashflowStatementHistory`);
+    // Try multiple Yahoo Finance endpoints
+    const endpoints = [
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=financialData,balanceSheetHistory,incomeStatementHistory,cashflowStatementHistory`,
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=financialData,balanceSheetHistory,incomeStatementHistory,cashflowStatementHistory`
+    ];
     
-    if (!response.ok) {
-      console.log(`Failed to fetch financial data for ${symbol}`);
+    let data = null;
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+        console.log(`Endpoint ${endpoint} failed with status: ${response.status}`);
+      } catch (err) {
+        console.log(`Endpoint ${endpoint} failed:`, err.message);
+      }
+    }
+    
+    if (!data) {
+      console.log(`All endpoints failed for ${symbol}`);
       return null;
     }
 
-    const data = await response.json();
-    
     // Parse ข้อมูลจาก Yahoo Finance API
-    const financialData = data.quoteSummary?.result?.[0];
-    if (!financialData) return null;
+    const quoteSummary = data.quoteSummary?.result?.[0];
+    if (!quoteSummary) {
+      console.log(`No quote summary found for ${symbol}`);
+      return null;
+    }
+
+    const balanceSheet = quoteSummary.balanceSheetHistory?.balanceSheetStatements?.[0] || {};
+    const incomeStatement = quoteSummary.incomeStatementHistory?.incomeStatements?.[0] || {};
+    const cashFlow = quoteSummary.cashflowStatementHistory?.cashflowStatements?.[0] || {};
+    const financialDataRaw = quoteSummary.financialData || {};
+
+    console.log(`Successfully fetched data for ${symbol}`);
 
     return {
       symbol,
-      revenue: financialData.incomeStatementHistory?.incomeStatementHistory?.[0]?.totalRevenue?.raw || 0,
-      netIncome: financialData.incomeStatementHistory?.incomeStatementHistory?.[0]?.netIncome?.raw || 0,
-      totalAssets: financialData.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw || 0,
-      totalEquity: financialData.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalStockholderEquity?.raw || 0,
-      totalDebt: financialData.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalDebt?.raw || 0,
-      operatingIncome: financialData.incomeStatementHistory?.incomeStatementHistory?.[0]?.operatingIncome?.raw || 0,
-      freeCashFlow: financialData.cashflowStatementHistory?.cashflowStatements?.[0]?.freeCashFlow?.raw || 0,
-      eps: financialData.financialData?.trailingEps?.raw || 0,
-      sharesOutstanding: financialData.financialData?.sharesOutstanding?.raw || 0,
-      currentAssets: financialData.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalCurrentAssets?.raw || 0,
-      currentLiabilities: financialData.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalCurrentLiabilities?.raw || 0,
+      revenue: incomeStatement.totalRevenue?.raw || 0,
+      netIncome: incomeStatement.netIncome?.raw || 0,
+      totalAssets: balanceSheet.totalAssets?.raw || 0,
+      totalEquity: balanceSheet.totalStockholderEquity?.raw || 0,
+      totalDebt: balanceSheet.totalDebt?.raw || 0,
+      operatingIncome: incomeStatement.operatingIncome?.raw || 0,
+      freeCashFlow: cashFlow.freeCashFlow?.raw || 0,
+      eps: financialDataRaw.trailingEps?.raw || 0,
+      sharesOutstanding: financialDataRaw.sharesOutstanding?.raw || 0,
+      currentAssets: balanceSheet.totalCurrentAssets?.raw || 0,
+      currentLiabilities: balanceSheet.totalCurrentLiabilities?.raw || 0,
     };
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
@@ -191,18 +222,28 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // คำนวณคะแนนรวม
+    const totalScore = buffettScore.roe_score + buffettScore.debt_equity_ratio_score + 
+                      buffettScore.net_profit_margin_score + buffettScore.free_cash_flow_score + 
+                      buffettScore.eps_growth_score + buffettScore.operating_margin_score + 
+                      buffettScore.current_ratio_score + buffettScore.share_dilution_score + 
+                      buffettScore.roa_score + buffettScore.moat_score + buffettScore.management_score;
+
     // บันทึกผลการวิเคราะห์
     const analysisData = {
       symbol,
       analysis_date: new Date().toISOString().split('T')[0],
+      total_score: totalScore,
       ...buffettScore,
       roe_percentage: financialData.totalEquity > 0 ? (financialData.netIncome / financialData.totalEquity) * 100 : null,
       debt_equity_ratio: financialData.totalEquity > 0 ? financialData.totalDebt / financialData.totalEquity : null,
       net_profit_margin: financialData.revenue > 0 ? (financialData.netIncome / financialData.revenue) * 100 : null,
       free_cash_flow: financialData.freeCashFlow,
+      eps_growth: null, // Will be calculated properly with historical data
       operating_margin: financialData.revenue > 0 ? (financialData.operatingIncome / financialData.revenue) * 100 : null,
       current_ratio: financialData.currentLiabilities > 0 ? financialData.currentAssets / financialData.currentLiabilities : null,
       roa_percentage: financialData.totalAssets > 0 ? (financialData.netIncome / financialData.totalAssets) * 100 : null,
+      current_price: null // Will be fetched separately
     };
 
     const { error } = await supabase
