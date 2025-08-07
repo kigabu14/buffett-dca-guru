@@ -10,8 +10,10 @@ const corsHeaders = {
 // Yahoo Finance API endpoints
 const YAHOO_FINANCE_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const YAHOO_FINANCE_QUOTE = 'https://query1.finance.yahoo.com/v1/finance/screener';
+const YAHOO_FINANCE_QUOTESUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary';
+const YAHOO_FINANCE_DIVIDENDS = 'https://query1.finance.yahoo.com/v7/finance/download';
 
-// Financial data fetching using Yahoo Finance API
+// Fetch comprehensive financial data from multiple Yahoo Finance endpoints
 async function fetchFinancialData(symbol: string) {
   try {
     console.log(`Fetching data for ${symbol} from Yahoo Finance`);
@@ -31,10 +33,53 @@ async function fetchFinancialData(symbol: string) {
 
     console.log(`Using symbol: ${cleanSymbol}`);
 
-    // Try Yahoo Finance Chart API first
-    const chartUrl = `${YAHOO_FINANCE_BASE}/${cleanSymbol}`;
+    // Fetch from multiple endpoints in parallel
+    const [chartData, summaryData] = await Promise.all([
+      fetchChartData(cleanSymbol),
+      fetchQuoteSummary(cleanSymbol)
+    ]);
+
+    return parseComprehensiveData(chartData, summaryData, symbol, cleanSymbol);
     
-    const response = await fetch(chartUrl, {
+  } catch (error) {
+    console.error(`Error fetching financial data for ${symbol}:`, error);
+    return createFallbackData(symbol);
+  }
+}
+
+// Fetch chart data (price, volume, etc.)
+async function fetchChartData(symbol: string) {
+  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
+  
+  const response = await fetch(chartUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chart API HTTP error! status: ${response.status}`);
+  }
+  
+  return await response.json();
+}
+
+// Fetch quote summary data (financial metrics, P/E, dividend info, etc.)
+async function fetchQuoteSummary(symbol: string) {
+  const modules = [
+    'defaultKeyStatistics',
+    'financialData', 
+    'summaryDetail',
+    'quoteType',
+    'price',
+    'summaryProfile'
+  ].join(',');
+  
+  const summaryUrl = `${YAHOO_FINANCE_QUOTESUMMARY}/${symbol}?modules=${modules}`;
+  
+  try {
+    const response = await fetch(summaryUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
@@ -42,47 +87,20 @@ async function fetchFinancialData(symbol: string) {
     });
 
     if (!response.ok) {
-      console.error(`Yahoo Finance HTTP error for ${symbol}! status: ${response.status}`);
-      
-      // If .BK symbol fails, try without suffix for Thai stocks
-      if (cleanSymbol.includes('.BK')) {
-        const altSymbol = cleanSymbol.replace('.BK', '');
-        console.log(`Trying alternative symbol: ${altSymbol}`);
-        
-        const altResponse = await fetch(`${YAHOO_FINANCE_BASE}/${altSymbol}`, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!altResponse.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const altData = await altResponse.json();
-        return parseYahooData(altData, symbol, altSymbol);
-      }
-      
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
+      return null;
     }
     
-    const data = await response.json();
-    console.log(`Yahoo Finance response for ${symbol}:`, JSON.stringify(data).substring(0, 500));
-    
-    return parseYahooData(data, symbol, cleanSymbol);
-    
+    return await response.json();
   } catch (error) {
-    console.error(`Error fetching financial data for ${symbol}:`, error);
-    
-    // Fallback to basic data structure
-    return createFallbackData(symbol);
+    console.warn(`Error fetching summary for ${symbol}:`, error);
+    return null;
   }
 }
 
-function parseYahooData(data: any, originalSymbol: string, cleanSymbol: string) {
+function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
   try {
-    const result = data?.chart?.result?.[0];
+    const result = chartData?.chart?.result?.[0];
     if (!result) {
       throw new Error('No chart data found');
     }
@@ -90,10 +108,11 @@ function parseYahooData(data: any, originalSymbol: string, cleanSymbol: string) 
     const meta = result.meta;
     const quotes = result.indicators?.quote?.[0];
     
-    if (!meta || !quotes) {
-      throw new Error('Invalid data structure');
+    if (!meta) {
+      throw new Error('Invalid chart data structure');
     }
 
+    // Extract basic price data
     const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
     const previousClose = meta.previousClose || currentPrice;
     const change = currentPrice - previousClose;
@@ -101,50 +120,128 @@ function parseYahooData(data: any, originalSymbol: string, cleanSymbol: string) 
 
     // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const market = isThaiStock ? 'SET' : 'NASDAQ';
+    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
     const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
 
-    // Get latest quote data
-    const latestQuote = quotes.close?.slice(-1)?.[0] || currentPrice;
-    const volume = quotes.volume?.slice(-1)?.[0] || 0;
-    const high = quotes.high?.slice(-1)?.[0] || currentPrice * 1.02;
-    const low = quotes.low?.slice(-1)?.[0] || currentPrice * 0.98;
-    const open = quotes.open?.slice(-1)?.[0] || previousClose;
+    // Get latest quote data from chart
+    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
+    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
+    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
+    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
 
-    console.log(`Successfully parsed data for ${originalSymbol}: price=${currentPrice}`);
+    // Extract financial data from summary API
+    let financialData = {};
+    let dividendData = {};
+    let keyStats = {};
+    
+    if (summaryData?.quoteSummary?.result?.[0]) {
+      const summaryResult = summaryData.quoteSummary.result[0];
+      
+      // Financial metrics
+      const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
+      const financialInfo = summaryResult.financialData || {};
+      const summaryDetail = summaryResult.summaryDetail || {};
+      const price = summaryResult.price || {};
+      
+      financialData = {
+        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
+        pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
+            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
+        eps: defaultKeyStats.trailingEps?.raw || 
+             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
+        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
+        priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
+        
+        // Financial health metrics
+        profitMargin: financialInfo.profitMargins?.raw || 0.15,
+        operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
+        returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
+        debtToEquity: financialInfo.debtToEquity?.raw || 0.5,
+        currentRatio: financialInfo.currentRatio?.raw || 2.0,
+        
+        // Growth metrics
+        revenueGrowth: financialInfo.revenueGrowth?.raw || 0.1,
+        earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
+      };
+      
+      // Dividend information
+      dividendData = {
+        dividendYield: summaryDetail.dividendYield?.raw || 
+                      summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
+        dividendRate: summaryDetail.dividendRate?.raw || 
+                     summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
+        exDividendDate: summaryDetail.exDividendDate?.fmt || null,
+        dividendDate: summaryDetail.dividendDate?.fmt || null,
+        payoutRatio: summaryDetail.payoutRatio?.raw || null
+      };
+      
+      // Additional key statistics
+      keyStats = {
+        fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
+                         defaultKeyStats.fiftyTwoWeekHigh?.raw || 
+                         meta.fiftyTwoWeekHigh || (currentPrice * 1.3),
+        fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || 
+                        defaultKeyStats.fiftyTwoWeekLow?.raw || 
+                        meta.fiftyTwoWeekLow || (currentPrice * 0.7),
+        beta: defaultKeyStats.beta?.raw || 1.0,
+        sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
+                          price.sharesOutstanding?.raw || 1000000000
+      };
+    }
+
+    console.log(`Successfully parsed comprehensive data for ${originalSymbol}: price=${currentPrice}, PE=${financialData.pe}, dividend=${dividendData.dividendYield}`);
 
     return {
       symbol: originalSymbol,
-      name: meta.symbol || cleanSymbol,
+      name: meta.longName || meta.shortName || cleanSymbol,
       price: currentPrice,
       current_price: currentPrice,
       change: change,
       changePercent: changePercent,
       market: market,
       currency: currency,
-      marketCap: meta.marketCap || currentPrice * 1000000000, // Estimation
-      pe: 15.0, // Default estimation
-      eps: currentPrice / 15.0,
-      dividendYield: 0.03,
-      dividendRate: currentPrice * 0.03,
-      exDividendDate: null,
-      dividendDate: null,
-      weekHigh52: meta.fiftyTwoWeekHigh || currentPrice * 1.2,
-      weekLow52: meta.fiftyTwoWeekLow || currentPrice * 0.8,
-      volume: volume,
+      
+      // Price data
       open: open,
-      dayHigh: high,
-      dayLow: low,
-      // Financial ratios for analysis
-      roe: 0.15,
-      debtToEquity: 0.5,
-      profitMargin: 0.15,
-      operatingMargin: 0.20,
-      currentRatio: 2.0,
+      dayHigh: dayHigh,
+      dayLow: dayLow,
+      volume: volume,
+      
+      // Financial metrics
+      marketCap: financialData.marketCap,
+      pe: financialData.pe,
+      eps: financialData.eps,
+      bookValue: financialData.bookValue,
+      priceToBook: financialData.priceToBook,
+      
+      // Dividend data
+      dividendYield: dividendData.dividendYield,
+      dividendRate: dividendData.dividendRate,
+      exDividendDate: dividendData.exDividendDate,
+      dividendDate: dividendData.dividendDate,
+      payoutRatio: dividendData.payoutRatio,
+      
+      // 52-week range
+      weekHigh52: keyStats.fiftyTwoWeekHigh,
+      weekLow52: keyStats.fiftyTwoWeekLow,
+      beta: keyStats.beta,
+      
+      // Financial health ratios
+      roe: financialData.returnOnEquity,
+      profitMargin: financialData.profitMargin,
+      operatingMargin: financialData.operatingMargin,
+      debtToEquity: financialData.debtToEquity,
+      currentRatio: financialData.currentRatio,
+      
+      // Growth metrics
+      revenueGrowth: financialData.revenueGrowth,
+      earningsGrowth: financialData.earningsGrowth,
+      
       success: true
     };
+    
   } catch (error) {
-    console.error(`Error parsing Yahoo data for ${originalSymbol}:`, error);
+    console.error(`Error parsing comprehensive data for ${originalSymbol}:`, error);
     return createFallbackData(originalSymbol);
   }
 }
