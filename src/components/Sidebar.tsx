@@ -42,6 +42,12 @@ const navigation = [
     thaiName: 'การวิเคราะห์ Buffett'
   },
   {
+    name: 'analysis-settings',
+    href: '/analysis-settings',
+    icon: Settings,
+    thaiName: 'ตั้งค่าการวิเคราะห์'
+  },
+  {
     name: 'dividends',
     href: '/dividends',
     icon: DollarSign,

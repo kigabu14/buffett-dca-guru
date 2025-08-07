@@ -60,7 +60,6 @@ const customPresets = {
     netProfitMargin: 8,
     freeCashFlow: 6,
     epsGrowth: 15,
-    epsGrowth: 9,
     operatingMargin: 8,
     currentRatio: 3,
     shareDilution: 4,
@@ -93,149 +92,87 @@ export const useAnalysisSettings = () => {
   });
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      loadSettings();
-    }
-  }, [user]);
-
-  const loadSettings = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('analysis_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('is_default', { ascending: false });
-
-      if (error) throw error;
-
-      setSettings(data || []);
-      
-      // Set current settings to default or first available
-      const defaultSetting = data?.find(s => s.is_default);
-      if (defaultSetting) {
-        setCurrentSettings(defaultSetting);
-      }
-    } catch (error) {
-      console.error('Error loading analysis settings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Simplified version without database functionality for now
   const saveSettings = async (newSettings: Omit<AnalysisSettings, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('analysis_settings')
-        .insert({
-          ...newSettings,
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setSettings(prev => [...prev, data]);
-      setCurrentSettings(data);
-      
-      return data;
-    } catch (error) {
-      console.error('Error saving analysis settings:', error);
-      throw error;
-    }
+    // Simulate saving - in real implementation this would save to database
+    const settingWithId = {
+      ...newSettings,
+      id: Date.now().toString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    setSettings(prev => [...prev, settingWithId]);
+    setCurrentSettings(settingWithId);
+    
+    // Store in localStorage for now
+    const savedSettings = JSON.parse(localStorage.getItem('analysisSettings') || '[]');
+    savedSettings.push(settingWithId);
+    localStorage.setItem('analysisSettings', JSON.stringify(savedSettings));
+    
+    return settingWithId;
   };
 
   const updateSettings = async (id: string, updates: Partial<AnalysisSettings>) => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('analysis_settings')
-        .update(updates)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setSettings(prev => prev.map(s => s.id === id ? data : s));
-      
-      if (currentSettings.id === id) {
-        setCurrentSettings(data);
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error updating analysis settings:', error);
-      throw error;
-    }
+    const updatedSetting = { ...currentSettings, ...updates, updated_at: new Date().toISOString() };
+    setSettings(prev => prev.map(s => s.id === id ? updatedSetting : s));
+    setCurrentSettings(updatedSetting);
+    
+    // Update localStorage
+    const savedSettings = JSON.parse(localStorage.getItem('analysisSettings') || '[]');
+    const updatedSettings = savedSettings.map((s: any) => s.id === id ? updatedSetting : s);
+    localStorage.setItem('analysisSettings', JSON.stringify(updatedSettings));
+    
+    return updatedSetting;
   };
 
   const deleteSettings = async (id: string) => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('analysis_settings')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setSettings(prev => prev.filter(s => s.id !== id));
-      
-      // If deleted current settings, revert to default
-      if (currentSettings.id === id) {
-        setCurrentSettings({
-          name: 'Buffett Default',
-          weights: defaultBuffettWeights,
-          is_default: true
-        });
-      }
-    } catch (error) {
-      console.error('Error deleting analysis settings:', error);
-      throw error;
+    setSettings(prev => prev.filter(s => s.id !== id));
+    
+    // Remove from localStorage
+    const savedSettings = JSON.parse(localStorage.getItem('analysisSettings') || '[]');
+    const filteredSettings = savedSettings.filter((s: any) => s.id !== id);
+    localStorage.setItem('analysisSettings', JSON.stringify(filteredSettings));
+    
+    // If deleted current settings, revert to default
+    if (currentSettings.id === id) {
+      setCurrentSettings({
+        name: 'Buffett Default',
+        weights: defaultBuffettWeights,
+        is_default: true
+      });
     }
   };
 
   const setAsDefault = async (id: string) => {
-    if (!user) return;
-
-    try {
-      // First, unset all as default
-      await supabase
-        .from('analysis_settings')
-        .update({ is_default: false })
-        .eq('user_id', user.id);
-
-      // Then set the selected one as default
-      const { data, error } = await supabase
-        .from('analysis_settings')
-        .update({ is_default: true })
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
+    const setting = settings.find(s => s.id === id);
+    if (setting) {
       setSettings(prev => prev.map(s => ({ ...s, is_default: s.id === id })));
-      setCurrentSettings(data);
-
-      return data;
-    } catch (error) {
-      console.error('Error setting default analysis settings:', error);
-      throw error;
+      setCurrentSettings({ ...setting, is_default: true });
+      
+      // Update localStorage
+      const savedSettings = JSON.parse(localStorage.getItem('analysisSettings') || '[]');
+      const updatedSettings = savedSettings.map((s: any) => ({ ...s, is_default: s.id === id }));
+      localStorage.setItem('analysisSettings', JSON.stringify(updatedSettings));
+      
+      return setting;
     }
   };
+
+  const loadSettings = async () => {
+    // Load from localStorage for now
+    const savedSettings = JSON.parse(localStorage.getItem('analysisSettings') || '[]');
+    setSettings(savedSettings);
+    
+    const defaultSetting = savedSettings.find((s: any) => s.is_default);
+    if (defaultSetting) {
+      setCurrentSettings(defaultSetting);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
   const calculateCustomScore = (financialData: any, weights: AnalysisWeights = currentSettings.weights) => {
     const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0);

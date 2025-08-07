@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Portfolio from "./pages/Portfolio";
 import Analysis from "./pages/Analysis";
+import AnalysisSettings from "./pages/AnalysisSettings";
 import Compare from "./pages/Compare";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
@@ -34,6 +35,7 @@ const App = () => (
                 <Route path="portfolio" element={<Portfolio />} />
                 <Route path="compare" element={<Compare />} />
                 <Route path="analysis" element={<Analysis />} />
+                <Route path="analysis-settings" element={<AnalysisSettings />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+          weights: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+          weights: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+          weights?: Json
+        }
+        Relationships: []
+      }
       buffett_analysis: {
         Row: {
           analysis_date: string
