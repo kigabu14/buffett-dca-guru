@@ -61,7 +61,7 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-semibold">
-            {stockData.currency === 'THB' ? '฿' : '$'}{stockData.price.toFixed(2)}
+            {stockData.currency === 'THB' || stockData.symbol.includes('.BK') ? '฿' : '$'}{stockData.price.toFixed(2)}
           </span>
           {stockData.isSampleData && (
             <Badge variant="secondary" className="text-xs">
@@ -89,7 +89,7 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
             <span>
-              {gainLoss >= 0 ? '+' : ''}{stockData.currency === 'THB' ? '฿' : '$'}{gainLoss.toFixed(2)}
+              {gainLoss >= 0 ? '+' : ''}{stockData.currency === 'THB' || stockData.symbol.includes('.BK') ? '฿' : '$'}{gainLoss.toFixed(2)}
             </span>
             <span>({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)</span>
           </div>
