@@ -150,8 +150,14 @@ const Portfolio = () => {
     console.log('Starting investment submission:', { investmentData, userId: user.id });
 
     try {
+      // Filter out any fields that don't exist in the database
+      const {
+        commission_rate, // Remove this field since it doesn't exist in DB
+        ...cleanedData
+      } = investmentData;
+
       const dataWithUserId = {
-        ...investmentData,
+        ...cleanedData,
         user_id: user.id
       };
 
