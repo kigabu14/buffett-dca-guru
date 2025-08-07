@@ -5,7 +5,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Calendar, DollarSign, TrendingUp, Clock } from 'lucide-react';
 import { format, isAfter, isBefore, parseISO, addDays } from 'date-fns';
-import { th } from 'date-fns/locale';
 
 interface XDEvent {
   id: string;
@@ -158,13 +157,13 @@ export const DividendCalendar = () => {
                     <div className="space-y-1 text-sm">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span>วัน XD: {format(parseISO(event.ex_dividend_date), 'dd MMM yyyy', { locale: th })}</span>
+                        <span>วัน XD: {format(parseISO(event.ex_dividend_date), 'dd MMM yyyy')}</span>
                       </div>
                       
                       {event.payment_date && (
                         <div className="flex items-center gap-2">
                           <DollarSign className="h-4 w-4 text-muted-foreground" />
-                          <span>วันจ่าย: {format(parseISO(event.payment_date), 'dd MMM yyyy', { locale: th })}</span>
+                          <span>วันจ่าย: {format(parseISO(event.payment_date), 'dd MMM yyyy')}</span>
                         </div>
                       )}
                       
