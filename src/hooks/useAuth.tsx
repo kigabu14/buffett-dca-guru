@@ -22,14 +22,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log('Auth useEffect: Setting up auth state listener');
+    
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state change:', event, 'Session:', !!session, 'User:', !!session?.user);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
 
         if (event === 'SIGNED_IN') {
+          console.log('User signed in successfully');
           toast({
             title: "เข้าสู่ระบบสำเร็จ",
             description: "ยินดีต้อนรับสู่แอปลงทุน",
@@ -37,6 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         
         if (event === 'SIGNED_OUT') {
+          console.log('User signed out');
           toast({
             title: "ออกจากระบบแล้ว",
             description: "ขอบคุณที่ใช้บริการ",
@@ -46,7 +51,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log('Initial session check:', !!session, 'Error:', error);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);

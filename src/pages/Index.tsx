@@ -13,9 +13,12 @@ const Index = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('Index useEffect - Loading:', loading, 'User:', !!user);
     if (!loading && !user) {
+      console.log('Redirecting to /auth - no user');
       navigate('/auth');
     } else if (!loading && user) {
+      console.log('Redirecting to /dashboard - user exists');
       navigate('/dashboard');
     }
   }, [user, loading, navigate]);
