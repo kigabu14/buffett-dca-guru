@@ -136,9 +136,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
       dividend_yield_at_purchase: dividendYieldAtPurchase ? 
         parseFloat(dividendYieldAtPurchase) / 100 : null,
       notes: notes || null,
-      current_price: stockData?.price || parseFloat(buyPrice),
-      ex_dividend_date: stockData?.exDividendDate || null,
-      dividend_rate: stockData?.dividendRate || 0,
+      current_price: stockData?.price || parseFloat(buyPrice)
     };
 
     console.log('Investment form submitting clean data:', data);
