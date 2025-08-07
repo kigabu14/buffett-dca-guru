@@ -286,8 +286,10 @@ const Dashboard = () => {
                   <TableHead className="text-right">เปลี่ยนแปลง</TableHead>
                   <TableHead className="text-right">%เปลี่ยนแปลง</TableHead>
                   <TableHead className="text-right">Volume</TableHead>
+                  <TableHead className="text-right">P/E</TableHead>
+                  <TableHead className="text-right">52W High</TableHead>
+                  <TableHead className="text-right">52W Low</TableHead>
                   <TableHead className="text-center">DCA Score</TableHead>
-                  <TableHead className="text-center">สถานะ</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -314,16 +316,20 @@ const Dashboard = () => {
                         {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
                       </TableCell>
                       <TableCell className="text-right">
-                        {YahooFinanceService.formatLargeNumber(stock.volume)}
+                        {stock.volume > 0 ? YahooFinanceService.formatLargeNumber(stock.volume) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stock.pe > 0 ? stock.pe.toFixed(2) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stock.weekHigh52 > 0 ? YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {stock.weekLow52 > 0 ? YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className={getDCAScoreColor(dcaScore)}>
                           {dcaScore}/8
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          เรียลไทม์
                         </Badge>
                       </TableCell>
                     </TableRow>

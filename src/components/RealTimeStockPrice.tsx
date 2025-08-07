@@ -51,9 +51,10 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
   const change = stockData.change;
   const changePercent = stockData.changePercent;
   
-  // Proper gain/loss calculation using the same currency
-  const gainLoss = buyPrice ? (stockData.price - buyPrice) : 0;
-  const gainLossPercent = buyPrice ? ((stockData.price - buyPrice) / buyPrice) * 100 : 0;
+  // Fixed gain/loss calculation
+  const currentPrice = stockData.price;
+  const gainLoss = buyPrice ? (currentPrice - buyPrice) : 0;
+  const gainLossPercent = buyPrice && buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0;
 
   return (
     <div className={`space-y-2 ${className}`}>
@@ -84,11 +85,11 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
           <span>({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
         </div>
         
-        {buyPrice && (
+        {buyPrice && buyPrice > 0 && (
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
             <span>
-              {gainLoss >= 0 ? '+' : ''}{stockData.currency === 'THB' ? '฿' : '$'}{Math.abs(gainLoss).toFixed(2)}
+              {gainLoss >= 0 ? '+' : ''}{stockData.currency === 'THB' ? '฿' : '$'}{gainLoss.toFixed(2)}
             </span>
             <span>({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)</span>
           </div>

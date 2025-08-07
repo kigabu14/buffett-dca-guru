@@ -393,8 +393,8 @@ const Portfolio = () => {
         {investments.length > 0 && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <PortfolioPieChart investments={investments} />
-              <DividendCalendar />
+              {user && <PortfolioPieChart investments={investments} />}
+              {user && <DividendCalendar />}
             </div>
             <Separator className="my-8" />
           </>
