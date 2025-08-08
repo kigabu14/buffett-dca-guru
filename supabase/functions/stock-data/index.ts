@@ -43,7 +43,7 @@ async function fetchFinancialData(symbol: string) {
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
-    return createFallbackData(symbol);
+    throw new Error(`Failed to fetch financial data for ${symbol}: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -59,10 +59,17 @@ async function fetchChartData(symbol: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Chart API HTTP error! status: ${response.status}`);
+    throw new Error(`Chart API HTTP error for ${symbol}! status: ${response.status}`);
   }
   
-  return await response.json();
+  const data = await response.json();
+  
+  // Validate that we have the expected data structure
+  if (!data?.chart?.result?.[0]?.meta) {
+    throw new Error(`Invalid or empty chart data structure for ${symbol}`);
+  }
+  
+  return data;
 }
 
 // Fetch quote summary data (financial metrics, P/E, dividend info, etc.)
@@ -87,119 +94,162 @@ async function fetchQuoteSummary(symbol: string) {
     });
 
     if (!response.ok) {
-      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
-      return null;
+      throw new Error(`Summary API failed for ${symbol}, HTTP status: ${response.status}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    
+    // Validate that we have the expected data structure
+    if (!data?.quoteSummary?.result?.[0]) {
+      throw new Error(`Invalid or empty summary data structure for ${symbol}`);
+    }
+    
+    return data;
   } catch (error) {
-    console.warn(`Error fetching summary for ${symbol}:`, error);
-    return null;
+    console.error(`Error fetching summary for ${symbol}:`, error);
+    throw new Error(`Failed to fetch quote summary for ${symbol}: ${error.message || 'Unknown error'}`);
   }
 }
 
-function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
+function parseComprehensiveData(chartData: unknown, summaryData: unknown, originalSymbol: string, cleanSymbol: string) {
   try {
-    const result = chartData?.chart?.result?.[0];
-    if (!result) {
-      throw new Error('No chart data found');
+    // Validate input data
+    if (!chartData) {
+      throw new Error(`Chart data is null or undefined for ${originalSymbol}`);
+    }
+    
+    if (!summaryData) {
+      throw new Error(`Summary data is null or undefined for ${originalSymbol}`);
     }
 
-    const meta = result.meta;
-    const quotes = result.indicators?.quote?.[0];
+    // Type guard and extraction for chart data
+    if (typeof chartData !== 'object' || chartData === null) {
+      throw new Error(`Chart data is not a valid object for ${originalSymbol}`);
+    }
+    
+    const chartObj = chartData as Record<string, unknown>;
+    const chart = chartObj.chart as Record<string, unknown>;
+    if (!chart || typeof chart !== 'object') {
+      throw new Error(`Chart data structure is invalid for ${originalSymbol}`);
+    }
+    
+    const chartResult = (chart.result as unknown[])?.[0] as Record<string, unknown>;
+    if (!chartResult) {
+      throw new Error(`No chart result data found for ${originalSymbol}`);
+    }
+
+    const meta = chartResult.meta as Record<string, unknown>;
+    const indicators = chartResult.indicators as Record<string, unknown>;
+    const quotes = (indicators?.quote as unknown[])?.[0] as Record<string, unknown>;
     
     if (!meta) {
-      throw new Error('Invalid chart data structure');
+      throw new Error(`Invalid chart data structure - missing meta for ${originalSymbol}`);
     }
 
-    // Extract basic price data
-    const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
-    const previousClose = meta.previousClose || currentPrice;
+    // Extract basic price data with proper type checking
+    const regularMarketPrice = meta?.regularMarketPrice as number;
+    const previousClose = meta?.previousClose as number;
+    const currentPrice = regularMarketPrice || previousClose || 0;
     const change = currentPrice - previousClose;
     const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
 
     // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
-    const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
+    const exchangeName = meta?.exchangeName as string;
+    const currency = meta?.currency as string;
+    const market = isThaiStock ? 'SET' : (exchangeName || 'NASDAQ');
+    const currencyCode = isThaiStock ? 'THB' : (currency || 'USD');
 
-    // Get latest quote data from chart
-    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
-    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
-    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
-    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
-
-    // Extract financial data from summary API
-    let financialData = {};
-    let dividendData = {};
-    let keyStats = {};
+    // Get latest quote data from chart with type checking
+    const regularMarketVolume = meta?.regularMarketVolume as number;
+    const volumeArray = quotes?.volume as number[];
+    const highArray = quotes?.high as number[];
+    const lowArray = quotes?.low as number[];
+    const openArray = quotes?.open as number[];
     
-    if (summaryData?.quoteSummary?.result?.[0]) {
-      const summaryResult = summaryData.quoteSummary.result[0];
-      
-      // Financial metrics
-      const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
-      const financialInfo = summaryResult.financialData || {};
-      const summaryDetail = summaryResult.summaryDetail || {};
-      const price = summaryResult.price || {};
-      
-      financialData = {
-        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
-        pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
-            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
-        eps: defaultKeyStats.trailingEps?.raw || 
-             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
-        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
-        priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
-        
-        // Financial health metrics
-        profitMargin: financialInfo.profitMargins?.raw || 0.15,
-        operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
-        returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
-        debtToEquity: financialInfo.debtToEquity?.raw || 0.5,
-        currentRatio: financialInfo.currentRatio?.raw || 2.0,
-        
-        // Growth metrics
-        revenueGrowth: financialInfo.revenueGrowth?.raw || 0.1,
-        earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
-      };
-      
-      // Dividend information
-      dividendData = {
-        dividendYield: summaryDetail.dividendYield?.raw || 
-                      summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
-        dividendRate: summaryDetail.dividendRate?.raw || 
-                     summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
-        exDividendDate: summaryDetail.exDividendDate?.fmt || null,
-        dividendDate: summaryDetail.dividendDate?.fmt || null,
-        payoutRatio: summaryDetail.payoutRatio?.raw || null
-      };
-      
-      // Additional key statistics
-      keyStats = {
-        fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
-                         defaultKeyStats.fiftyTwoWeekHigh?.raw || 
-                         meta.fiftyTwoWeekHigh || (currentPrice * 1.3),
-        fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || 
-                        defaultKeyStats.fiftyTwoWeekLow?.raw || 
-                        meta.fiftyTwoWeekLow || (currentPrice * 0.7),
-        beta: defaultKeyStats.beta?.raw || 1.0,
-        sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
-                          price.sharesOutstanding?.raw || 1000000000
-      };
+    const volume = regularMarketVolume || (volumeArray?.slice(-1)?.[0]) || 0;
+    const dayHigh = (meta?.regularMarketDayHigh as number) || (highArray?.slice(-1)?.[0]) || currentPrice * 1.02;
+    const dayLow = (meta?.regularMarketDayLow as number) || (lowArray?.slice(-1)?.[0]) || currentPrice * 0.98;
+    const open = (meta?.regularMarketOpen as number) || (openArray?.slice(-1)?.[0]) || previousClose;
+
+    // Extract financial data from summary API (should be validated in fetchQuoteSummary)
+    const summaryObj = summaryData as Record<string, unknown>;
+    const quoteSummary = summaryObj.quoteSummary as Record<string, unknown>;
+    const result = (quoteSummary.result as unknown[])?.[0] as Record<string, unknown>;
+    
+    if (!result) {
+      throw new Error(`Summary result data is missing for ${originalSymbol}`);
     }
+    
+    // Financial metrics with proper type checking
+    const defaultKeyStats = (result.defaultKeyStatistics as Record<string, unknown>) || {};
+    const financialInfo = (result.financialData as Record<string, unknown>) || {};
+    const summaryDetail = (result.summaryDetail as Record<string, unknown>) || {};
+    const price = (result.price as Record<string, unknown>) || {};
+    
+    const financialData = {
+      marketCap: ((price.marketCap as Record<string, unknown>)?.raw as number) || 
+                 (meta?.marketCap as number) || 
+                 currentPrice * 1000000000,
+      pe: ((defaultKeyStats.forwardPE as Record<string, unknown>)?.raw as number) || 
+          ((defaultKeyStats.trailingPE as Record<string, unknown>)?.raw as number) || 
+          ((summaryDetail.forwardPE as Record<string, unknown>)?.raw as number) || 
+          ((summaryDetail.trailingPE as Record<string, unknown>)?.raw as number) || 15.0,
+      eps: ((defaultKeyStats.trailingEps as Record<string, unknown>)?.raw as number) || 
+           ((financialInfo.trailingEps as Record<string, unknown>)?.raw as number) || 
+           (currentPrice / 15.0),
+      bookValue: ((defaultKeyStats.bookValue as Record<string, unknown>)?.raw as number) || 
+                 currentPrice * 0.8,
+      priceToBook: ((defaultKeyStats.priceToBook as Record<string, unknown>)?.raw as number) || 1.5,
+      
+      // Financial health metrics
+      profitMargin: ((financialInfo.profitMargins as Record<string, unknown>)?.raw as number) || 0.15,
+      operatingMargin: ((financialInfo.operatingMargins as Record<string, unknown>)?.raw as number) || 0.20,
+      returnOnEquity: ((financialInfo.returnOnEquity as Record<string, unknown>)?.raw as number) || 0.15,
+      debtToEquity: ((financialInfo.debtToEquity as Record<string, unknown>)?.raw as number) || 0.5,
+      currentRatio: ((financialInfo.currentRatio as Record<string, unknown>)?.raw as number) || 2.0,
+      
+      // Growth metrics
+      revenueGrowth: ((financialInfo.revenueGrowth as Record<string, unknown>)?.raw as number) || 0.1,
+      earningsGrowth: ((financialInfo.earningsGrowth as Record<string, unknown>)?.raw as number) || 0.1
+    };
+    
+    // Dividend information
+    const dividendData = {
+      dividendYield: ((summaryDetail.dividendYield as Record<string, unknown>)?.raw as number) || 
+                     ((summaryDetail.trailingAnnualDividendYield as Record<string, unknown>)?.raw as number) || 0.03,
+      dividendRate: ((summaryDetail.dividendRate as Record<string, unknown>)?.raw as number) || 
+                   ((summaryDetail.trailingAnnualDividendRate as Record<string, unknown>)?.raw as number) || 
+                   (currentPrice * 0.03),
+      exDividendDate: ((summaryDetail.exDividendDate as Record<string, unknown>)?.fmt as string) || null,
+      dividendDate: ((summaryDetail.dividendDate as Record<string, unknown>)?.fmt as string) || null,
+      payoutRatio: ((summaryDetail.payoutRatio as Record<string, unknown>)?.raw as number) || null
+    };
+    
+    // Additional key statistics
+    const keyStats = {
+      fiftyTwoWeekHigh: ((summaryDetail.fiftyTwoWeekHigh as Record<string, unknown>)?.raw as number) || 
+                       ((defaultKeyStats.fiftyTwoWeekHigh as Record<string, unknown>)?.raw as number) || 
+                       (meta?.fiftyTwoWeekHigh as number) || (currentPrice * 1.3),
+      fiftyTwoWeekLow: ((summaryDetail.fiftyTwoWeekLow as Record<string, unknown>)?.raw as number) || 
+                      ((defaultKeyStats.fiftyTwoWeekLow as Record<string, unknown>)?.raw as number) || 
+                      (meta?.fiftyTwoWeekLow as number) || (currentPrice * 0.7),
+      beta: ((defaultKeyStats.beta as Record<string, unknown>)?.raw as number) || 1.0,
+      sharesOutstanding: ((defaultKeyStats.sharesOutstanding as Record<string, unknown>)?.raw as number) || 
+                        ((price.sharesOutstanding as Record<string, unknown>)?.raw as number) || 1000000000
+    };
 
     console.log(`Successfully parsed comprehensive data for ${originalSymbol}: price=${currentPrice}, PE=${financialData.pe}, dividend=${dividendData.dividendYield}`);
 
     return {
       symbol: originalSymbol,
-      name: meta.longName || meta.shortName || cleanSymbol,
+      name: (meta?.longName as string) || (meta?.shortName as string) || cleanSymbol,
       price: currentPrice,
       current_price: currentPrice,
       change: change,
       changePercent: changePercent,
       market: market,
-      currency: currency,
+      currency: currencyCode,
       
       // Price data
       open: open,
@@ -242,43 +292,8 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
     
   } catch (error) {
     console.error(`Error parsing comprehensive data for ${originalSymbol}:`, error);
-    return createFallbackData(originalSymbol);
+    throw new Error(`Failed to parse comprehensive data for ${originalSymbol}: ${error.message || 'Unknown parsing error'}`);
   }
-}
-
-function createFallbackData(symbol: string) {
-  const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
-  const basePrice = isThaiStock ? 50 : 100; // Default prices
-  
-  return {
-    symbol: symbol,
-    name: symbol.replace('.BK', '').replace('.SET', ''),
-    price: basePrice,
-    current_price: basePrice,
-    change: 0,
-    changePercent: 0,
-    market: isThaiStock ? 'SET' : 'NASDAQ',
-    currency: isThaiStock ? 'THB' : 'USD',
-    marketCap: basePrice * 1000000000,
-    pe: 15.0,
-    eps: basePrice / 15.0,
-    dividendYield: 0.03,
-    dividendRate: basePrice * 0.03,
-    exDividendDate: null,
-    dividendDate: null,
-    weekHigh52: basePrice * 1.2,
-    weekLow52: basePrice * 0.8,
-    volume: 1000000,
-    open: basePrice,
-    dayHigh: basePrice * 1.02,
-    dayLow: basePrice * 0.98,
-    roe: 0.15,
-    debtToEquity: 0.5,
-    profitMargin: 0.15,
-    operatingMargin: 0.20,
-    currentRatio: 2.0,
-    success: false
-  };
 }
 
 function determineMarket(symbol: string): string {
