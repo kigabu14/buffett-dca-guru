@@ -246,40 +246,7 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
   }
 }
 
-function createFallbackData(symbol: string) {
-  const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
-  const basePrice = isThaiStock ? 50 : 100; // Default prices
-  
-  return {
-    symbol: symbol,
-    name: symbol.replace('.BK', '').replace('.SET', ''),
-    price: basePrice,
-    current_price: basePrice,
-    change: 0,
-    changePercent: 0,
-    market: isThaiStock ? 'SET' : 'NASDAQ',
-    currency: isThaiStock ? 'THB' : 'USD',
-    marketCap: basePrice * 1000000000,
-    pe: 15.0,
-    eps: basePrice / 15.0,
-    dividendYield: 0.03,
-    dividendRate: basePrice * 0.03,
-    exDividendDate: null,
-    dividendDate: null,
-    weekHigh52: basePrice * 1.2,
-    weekLow52: basePrice * 0.8,
-    volume: 1000000,
-    open: basePrice,
-    dayHigh: basePrice * 1.02,
-    dayLow: basePrice * 0.98,
-    roe: 0.15,
-    debtToEquity: 0.5,
-    profitMargin: 0.15,
-    operatingMargin: 0.20,
-    currentRatio: 2.0,
-    success: false
-  };
-}
+
 
 function determineMarket(symbol: string): string {
   if (symbol.includes('.BK') || symbol.includes('.SET')) {
