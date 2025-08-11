@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CalendarDays, Calculator, DollarSign, TrendingUp, Building2 } from 'lucide-react';
-import { YahooFinanceService } from '@/services/YahooFinanceService';
+import { YahooFinanceService, StockData } from '@/services/YahooFinanceService';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/hooks/useSettings';
@@ -30,9 +30,22 @@ interface StockInvestment {
   user_id: string;
 }
 
+interface InvestmentFormData {
+  symbol: string;
+  company_name: string | null;
+  quantity: number;
+  buy_price: number;
+  commission: number;
+  purchase_date: string;
+  market: string;
+  dividend_received: number;
+  dividend_yield_at_purchase: number | null;
+  notes: string | null;
+}
+
 interface InvestmentFormProps {
   editingInvestment: StockInvestment | null;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: InvestmentFormData) => void;
   onCancel: () => void;
 }
 
@@ -57,7 +70,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
       (editingInvestment.dividend_yield_at_purchase * 100).toString() : ''
   );
   const [notes, setNotes] = useState(editingInvestment?.notes || '');
-  const [stockData, setStockData] = useState<any>(null);
+  const [stockData, setStockData] = useState<StockData | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Auto-fetch stock data when symbol changes - ดึงข้อมูลหุ้นอัตโนมัติเมื่อ symbol เปลี่ยน
