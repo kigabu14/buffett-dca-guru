@@ -118,7 +118,7 @@ async function fetchQuoteSummary(symbol: string) {
 
 function parseComprehensiveData(chartData: unknown, summaryData: unknown, originalSymbol: string, cleanSymbol: string) {
   try {
-    const result = chartData?.chart?.result?.[0];
+    const result = (chartData as any)?.chart?.result?.[0];
     if (!result) {
       throw new Error('No chart data found');
     }
@@ -189,8 +189,8 @@ function parseComprehensiveData(chartData: unknown, summaryData: unknown, origin
       sharesOutstanding: null
     };
     
-    if (summaryData?.quoteSummary?.result?.[0]) {
-      const summaryResult = summaryData.quoteSummary.result[0];
+    if ((summaryData as any)?.quoteSummary?.result?.[0]) {
+      const summaryResult = (summaryData as any).quoteSummary.result[0];
       
       // Financial metrics - only use real values from Yahoo, null if not provided
       const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
