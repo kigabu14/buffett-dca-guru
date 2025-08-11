@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { YahooFinanceService, StockData } from "@/services/YahooFinanceService";
 import { RealTimeStockPrice } from "@/components/RealTimeStockPrice";
@@ -12,7 +13,11 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, TrendingDown, RefreshCw, Activity, DollarSign, BarChart3, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, RefreshCw, Activity, DollarSign, BarChart3, Target, Plus, X, RotateCcw } from "lucide-react";
+
+// Constants for watchlist management
+const MAX_SYMBOLS = 25;
+const DEFAULT_SYMBOLS = YahooFinanceService.getDefaultSymbols();
 
 const Dashboard = () => {
   const { portfolioStats, recentActivities, loading, refreshData } = useDashboardData();
@@ -23,19 +28,103 @@ const Dashboard = () => {
   const [loadingStocks, setLoadingStocks] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [userStocks, setUserStocks] = useState<any[]>([]);
+  
+  // Watchlist state management
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(DEFAULT_SYMBOLS);
+  const [newSymbol, setNewSymbol] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Popular stocks to display on dashboard
-  const popularStocks = [
-    'BBL.BK', 'CPALL.BK', 'PTT.BK', 'KBANK.BK', 'AOT.BK',
-    'AAPL', 'TSLA', 'GOOGL', 'MSFT', 'NVDA'
-  ];
-
+  // Load watchlist on component mount and user change
   useEffect(() => {
-    fetchStockData();
+    loadWatchlist();
+  }, [user]);
+
+  // Fetch stock data when selectedSymbols changes
+  useEffect(() => {
+    if (selectedSymbols.length > 0) {
+      fetchStockData();
+    }
+  }, [selectedSymbols]);
+
+  // Fetch user stocks when user changes
+  useEffect(() => {
     if (user) {
       fetchUserStocks();
     }
   }, [user]);
+
+  const loadWatchlist = async () => {
+    try {
+      const symbols = await YahooFinanceService.loadUserWatchlist(user?.id);
+      setSelectedSymbols(symbols);
+    } catch (error) {
+      console.error('Error loading watchlist:', error);
+      setSelectedSymbols(DEFAULT_SYMBOLS);
+    }
+  };
+
+  const saveWatchlist = async (symbols: string[]) => {
+    setIsSaving(true);
+    try {
+      await YahooFinanceService.persistWatchlist(symbols, user?.id);
+      toast({
+        title: "บันทึกสำเร็จ",
+        description: "รายการหุ้นติดตามได้รับการบันทึกแล้ว",
+      });
+    } catch (error) {
+      console.error('Error saving watchlist:', error);
+      toast({
+        title: "ไม่สามารถบันทึกได้",
+        description: "กรุณาลองใหม่อีกครั้ง",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addSymbol = async () => {
+    const symbol = newSymbol.toUpperCase().trim();
+    if (!symbol) return;
+    
+    if (selectedSymbols.includes(symbol)) {
+      toast({
+        title: "หุ้นซ้ำ",
+        description: "หุ้นนี้มีอยู่ในรายการแล้ว",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (selectedSymbols.length >= MAX_SYMBOLS) {
+      toast({
+        title: "เกินจำนวนสูงสุด",
+        description: `สามารถติดตามหุ้นได้สูงสุด ${MAX_SYMBOLS} ตัว`,
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const newSymbols = [...selectedSymbols, symbol];
+    setSelectedSymbols(newSymbols);
+    setNewSymbol('');
+    await saveWatchlist(newSymbols);
+  };
+
+  const removeSymbol = async (symbolToRemove: string) => {
+    const newSymbols = selectedSymbols.filter(symbol => symbol !== symbolToRemove);
+    setSelectedSymbols(newSymbols);
+    await saveWatchlist(newSymbols);
+  };
+
+  const resetToDefault = async () => {
+    setSelectedSymbols(DEFAULT_SYMBOLS);
+    await saveWatchlist(DEFAULT_SYMBOLS);
+    toast({
+      title: "รีเซ็ตเสร็จสิ้น",
+      description: "กลับไปใช้รายการหุ้นเริ่มต้น",
+    });
+  };
 
   const fetchUserStocks = async () => {
     if (!user?.id) return;
@@ -55,10 +144,10 @@ const Dashboard = () => {
           const stockPrices = await YahooFinanceService.getStocks(symbols);
           const priceMap = new Map(stockPrices.map(s => [s.symbol, s.price]));
           
-          // Update stocks with current prices
+          // Update stocks with current prices - do NOT fallback to current_price or buy_price
           const updatedStocks = data.map(stock => ({
             ...stock,
-            current_price_yahoo: priceMap.get(stock.symbol) || stock.current_price || stock.buy_price
+            current_price_yahoo: priceMap.get(stock.symbol) ?? null
           }));
           
           setUserStocks(updatedStocks);
@@ -77,14 +166,31 @@ const Dashboard = () => {
   const fetchStockData = async () => {
     setLoadingStocks(true);
     try {
-      const stocks = await YahooFinanceService.getStocks(popularStocks);
+      const stocks = await YahooFinanceService.getStocks(selectedSymbols);
       setStockData(stocks);
       setLastUpdate(new Date());
       
-      toast({
-        title: "อัพเดทข้อมูลสำเร็จ",
-        description: `ดึงข้อมูลหุ้น ${stocks.length} ตัวจาก Yahoo Finance`,
-      });
+      // Check for missing symbols and warn user
+      const receivedSymbols = stocks.map(s => s.symbol);
+      const missingSymbols = selectedSymbols.filter(symbol => !receivedSymbols.includes(symbol));
+      
+      if (missingSymbols.length > 0) {
+        toast({
+          title: "ไม่พบข้อมูลบางหุ้น",
+          description: `ไม่พบข้อมูล: ${missingSymbols.join(', ')} - กำลังลบออกจากรายการ`,
+          variant: "destructive"
+        });
+        
+        // Automatically remove missing symbols from watchlist
+        const validSymbols = selectedSymbols.filter(symbol => receivedSymbols.includes(symbol));
+        setSelectedSymbols(validSymbols);
+        await saveWatchlist(validSymbols);
+      } else {
+        toast({
+          title: "อัพเดทข้อมูลสำเร็จ",
+          description: `ดึงข้อมูลหุ้น ${stocks.length} ตัวจาก Yahoo Finance`,
+        });
+      }
     } catch (error) {
       console.error('Error fetching stock data:', error);
       setStockData([]);
@@ -105,7 +211,8 @@ const Dashboard = () => {
     return "bg-red-100 text-red-800";
   };
 
-  const getPriceChangeColor = (change: number) => {
+  const getPriceChangeColor = (change: number | null) => {
+    if (change === null) return "text-muted-foreground";
     if (change > 0) return "text-green-600";
     if (change < 0) return "text-red-600";
     return "text-muted-foreground";
@@ -113,10 +220,12 @@ const Dashboard = () => {
 
   const marketStats = {
     totalStocks: stockData.length,
-    gainers: stockData.filter(s => s.changePercent > 0).length,
-    losers: stockData.filter(s => s.changePercent < 0).length,
-    avgChange: stockData.length > 0 ? 
-      stockData.reduce((sum, s) => sum + s.changePercent, 0) / stockData.length : 0
+    gainers: stockData.filter(s => s.changePercent !== null && s.changePercent > 0).length,
+    losers: stockData.filter(s => s.changePercent !== null && s.changePercent < 0).length,
+    avgChange: (() => {
+      const validChanges = stockData.filter(s => s.changePercent !== null).map(s => s.changePercent!);
+      return validChanges.length > 0 ? validChanges.reduce((sum, change) => sum + change, 0) / validChanges.length : null;
+    })()
   };
 
   return (
@@ -209,6 +318,71 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Watchlist Management */}
+      <Card className="border-border/50 bg-card/50 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            จัดการรายการหุ้นติดตาม
+          </CardTitle>
+          <CardDescription>
+            เพิ่ม/ลบหุ้นที่ต้องการติดตาม (สูงสุด {MAX_SYMBOLS} ตัว) - ปัจจุบัน: {selectedSymbols.length}/{MAX_SYMBOLS}
+            {isSaving && <span className="text-blue-600 ml-2">กำลังบันทึก...</span>}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Add new symbol */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="ป้อนสัญลักษณ์หุ้น (เช่น AAPL, PTT.BK)"
+              value={newSymbol}
+              onChange={(e) => setNewSymbol(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addSymbol()}
+              className="flex-1"
+            />
+            <Button 
+              onClick={addSymbol}
+              disabled={!newSymbol.trim() || selectedSymbols.length >= MAX_SYMBOLS || isSaving}
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              เพิ่ม
+            </Button>
+            <Button 
+              onClick={resetToDefault}
+              variant="outline"
+              disabled={isSaving}
+              size="sm"
+            >
+              <RotateCcw className="h-4 w-4 mr-1" />
+              รีเซ็ต
+            </Button>
+          </div>
+
+          {/* Symbol chips */}
+          <div className="flex flex-wrap gap-2">
+            {selectedSymbols.map((symbol) => (
+              <Badge 
+                key={symbol} 
+                variant="secondary" 
+                className="px-3 py-1 flex items-center gap-1"
+              >
+                {symbol}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => removeSymbol(symbol)}
+                  disabled={isSaving}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* My Portfolio Holdings with Real-time Prices */}
       {userStocks.length > 0 && (
         <Card className="border-border/50 bg-card/50 backdrop-blur">
@@ -241,8 +415,12 @@ const Dashboard = () => {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>ราคาปัจจุบัน:</span>
-                      <span className="font-medium">
-                        {stock.symbol.includes('.BK') ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
+                      <span className="font-medium" title={stock.current_price_yahoo === null ? "ไม่มีข้อมูล" : undefined}>
+                        {YahooFinanceService.formatDisplayPrice(
+                          stock.current_price_yahoo, 
+                          stock.symbol.includes('.BK') ? 'THB' : 'USD',
+                          { placeholder: 'N/A' }
+                        )}
                       </span>
                     </div>
                     <RealTimeStockPrice 
@@ -258,15 +436,15 @@ const Dashboard = () => {
         </Card>
       )}
 
-      {/* Popular Stocks Table */}
+      {/* User's Stock Watchlist Table */}
       <Card className="border-border/50 bg-card/50 backdrop-blur">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            หุ้นยอดนิยม
+            รายการหุ้นติดตาม
           </CardTitle>
           <CardDescription>
-            ข้อมูลหุ้น SET100 และ US ที่ได้รับความนิยม
+            ข้อมูลหุ้นที่คุณเลือกติดตาม จาก Yahoo Finance API
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -307,25 +485,25 @@ const Dashboard = () => {
                         <Badge variant="outline">{stock.market}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
+                        {YahooFinanceService.formatDisplayPrice(stock.price, stock.currency, { placeholder: 'N/A' })}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.change)}`}>
-                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                        {stock.change !== null ? `${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}` : 'N/A'}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.changePercent)}`}>
-                        {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                        {YahooFinanceService.formatPercent(stock.changePercent, { placeholder: 'N/A' })}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.volume > 0 ? YahooFinanceService.formatLargeNumber(stock.volume) : '-'}
+                        {YahooFinanceService.formatLargeNumber(stock.volume)}
+                      </TableCell>
+                      <TableCell className="text-right" title={stock.pe === null ? "ไม่มีข้อมูล" : undefined}>
+                        {stock.pe !== null ? stock.pe.toFixed(2) : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.pe > 0 ? stock.pe.toFixed(2) : '-'}
+                        {YahooFinanceService.formatDisplayPrice(stock.weekHigh52, stock.currency, { placeholder: 'N/A' })}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.weekHigh52 > 0 ? YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stock.weekLow52 > 0 ? YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency) : '-'}
+                        {YahooFinanceService.formatDisplayPrice(stock.weekLow52, stock.currency, { placeholder: 'N/A' })}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className={getDCAScoreColor(dcaScore)}>
