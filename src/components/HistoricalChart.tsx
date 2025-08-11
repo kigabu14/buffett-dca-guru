@@ -40,43 +40,18 @@ export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, classN
     } catch (error) {
       console.error('Error fetching historical data:', error);
       
-      // Generate sample data for demonstration
-      const sampleData = generateSampleData();
-      setData(sampleData);
+      // Set empty data and show empty state instead of generating sample data
+      // ไม่มีข้อมูลจริงจาก Yahoo Finance - แสดง empty state แทนการสร้างข้อมูลตัวอย่าง
+      setData([]);
       
       toast({
-        title: "ใช้ข้อมูลตัวอย่าง",
-        description: "ไม่สามารถดึงข้อมูลจริงได้ กำลังแสดงข้อมูลตัวอย่าง",
-        variant: "default"
+        title: "ไม่สามารถดึงข้อมูลได้",
+        description: "ไม่มีข้อมูลจริงจาก Yahoo Finance สำหรับหุ้นนี้",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateSampleData = (): ChartDataPoint[] => {
-    const basePrice = 100;
-    const points = period === '1d' ? 24 : period === '5d' ? 120 : period === '1mo' ? 30 : 252;
-    
-    return Array.from({ length: points }, (_, i) => {
-      const volatility = 0.02;
-      const trend = 0.001;
-      const randomChange = (Math.random() - 0.5) * volatility;
-      const price = basePrice * (1 + trend * i + randomChange);
-      
-      const date = new Date();
-      if (period === '1d') {
-        date.setHours(date.getHours() - (points - i));
-      } else {
-        date.setDate(date.getDate() - (points - i));
-      }
-      
-      return {
-        date: date.toLocaleDateString('th-TH'),
-        price: Math.max(price, 1),
-        volume: Math.floor(Math.random() * 1000000) + 100000
-      };
-    });
   };
 
   useEffect(() => {
@@ -162,6 +137,25 @@ export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, classN
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
               <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
+            </div>
+          </div>
+        ) : data.length === 0 && !loading ? (
+          // Empty state when no data is available
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-center space-y-3">
+              <div className="text-muted-foreground text-lg">ไม่มีข้อมูลจริงจาก Yahoo</div>
+              <div className="text-sm text-muted-foreground">
+                ไม่สามารถดึงข้อมูลประวัติราคาของหุ้น {symbol} ได้
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchHistoricalData}
+                className="mt-3"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                ลองอีกครั้ง
+              </Button>
             </div>
           </div>
         ) : (

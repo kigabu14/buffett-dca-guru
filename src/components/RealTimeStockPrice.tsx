@@ -51,23 +51,21 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
   const change = stockData.change;
   const changePercent = stockData.changePercent;
   
-  // Fixed gain/loss calculation
+  // Fixed gain/loss calculation with null-safe checks
   const currentPrice = stockData.price;
-  const gainLoss = buyPrice ? (currentPrice - buyPrice) : 0;
-  const gainLossPercent = buyPrice && buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0;
+  const gainLoss = buyPrice && currentPrice != null ? (currentPrice - buyPrice) : null;
+  const gainLossPercent = buyPrice && currentPrice != null && buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : null;
 
   return (
     <div className={`space-y-2 ${className}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-semibold">
-            {stockData.symbol.includes('.BK') ? '฿' : '$'}{stockData.price.toFixed(2)}
+            {stockData.price != null ? 
+              `${stockData.currency === 'THB' ? '฿' : stockData.currency ? '$' : (stockData.symbol.includes('.BK') ? '฿' : '$')}${stockData.price.toFixed(2)}` : 
+              'ไม่มีข้อมูล'
+            }
           </span>
-          {stockData.isSampleData && (
-            <Badge variant="secondary" className="text-xs">
-              ตัวอย่าง
-            </Badge>
-          )}
         </div>
         <Button
           size="sm"
@@ -80,16 +78,22 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
       </div>
       
       <div className="flex items-center justify-between text-sm">
-        <div className={`flex items-center gap-1 ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          <span>{change >= 0 ? '+' : ''}{change.toFixed(2)}</span>
-          <span>({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+        <div className={`flex items-center gap-1 ${change != null && change >= 0 ? 'text-green-600' : change != null ? 'text-red-600' : 'text-muted-foreground'}`}>
+          {change != null && changePercent != null ? (
+            <>
+              <span>{change >= 0 ? '+' : ''}{change.toFixed(2)}</span>
+              <span>({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+            </>
+          ) : (
+            <span>ไม่มีข้อมูลการเปลี่ยนแปลง</span>
+          )}
         </div>
         
-        {buyPrice && buyPrice > 0 && (
+        {buyPrice && buyPrice > 0 && gainLoss != null && gainLossPercent != null && (
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
             <span>
-              {gainLoss >= 0 ? '+' : ''}{stockData.symbol.includes('.BK') ? '฿' : '$'}{gainLoss.toFixed(2)}
+              {gainLoss >= 0 ? '+' : ''}{stockData.currency === 'THB' ? '฿' : stockData.currency ? '$' : (stockData.symbol.includes('.BK') ? '฿' : '$')}{gainLoss.toFixed(2)}
             </span>
             <span>({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)</span>
           </div>
