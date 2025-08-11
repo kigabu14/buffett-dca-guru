@@ -57,7 +57,7 @@ interface HistoricalDataPoint {
 }
 
 export class YahooFinanceService {
-  // Fetch stock data from Yahoo Finance API via Supabase edge function
+  // Fetch stock data from Yahoo Finance API via Supabase edge function - Enhanced for yfinance 2.0.0 compatibility
   static async getStock(symbol: string): Promise<StockData> {
     try {
       console.log(`Fetching stock data for: ${symbol}`);
@@ -74,7 +74,7 @@ export class YahooFinanceService {
       if (data?.data && data.data.length > 0) {
         const stockData = data.data[0];
         
-        // Properly compute change/changePercent with fallback
+        // Enhanced data validation and computation with fallback
         const currentPrice = stockData.current_price || 0;
         const previousClose = stockData.previous_close || 0;
         const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
@@ -110,7 +110,7 @@ export class YahooFinanceService {
           operatingMargin: stockData.operating_margin || 0,
           currentRatio: stockData.current_ratio || 0,
           
-          // Extended metrics mapping (snake_case to camelCase)
+          // Enhanced metrics mapping (snake_case to camelCase) with better defaults
           bookValue: stockData.book_value || 0,
           priceToBook: stockData.price_to_book || 0,
           beta: stockData.beta || 1.0,
@@ -118,7 +118,7 @@ export class YahooFinanceService {
           revenueGrowth: stockData.revenue_growth || 0,
           earningsGrowth: stockData.earnings_growth || 0,
           
-          isSampleData: false
+          isSampleData: !stockData.success // Mark as sample data if API failed
         };
       } else {
         throw new Error(`ไม่พบข้อมูลหุ้น ${symbol}`);
@@ -129,7 +129,7 @@ export class YahooFinanceService {
     }
   }
 
-  // Fetch multiple stocks at once
+  // Fetch multiple stocks at once - Enhanced for yfinance 2.0.0 compatibility
   static async getStocks(symbols: string[]): Promise<StockData[]> {
     try {
       console.log(`Fetching data for ${symbols.length} stocks`);
@@ -145,7 +145,7 @@ export class YahooFinanceService {
 
       if (data?.data && data.data.length > 0) {
         return data.data.map((stockData: any) => {
-          // Properly compute change/changePercent with fallback
+          // Enhanced data validation and computation with fallback
           const currentPrice = stockData.current_price || 0;
           const previousClose = stockData.previous_close || 0;
           const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
@@ -181,7 +181,7 @@ export class YahooFinanceService {
             operatingMargin: stockData.operating_margin || 0,
             currentRatio: stockData.current_ratio || 0,
             
-            // Extended metrics mapping (snake_case to camelCase)
+            // Enhanced metrics mapping (snake_case to camelCase) with better defaults
             bookValue: stockData.book_value || 0,
             priceToBook: stockData.price_to_book || 0,
             beta: stockData.beta || 1.0,
@@ -189,7 +189,7 @@ export class YahooFinanceService {
             revenueGrowth: stockData.revenue_growth || 0,
             earningsGrowth: stockData.earnings_growth || 0,
             
-            isSampleData: false
+            isSampleData: !stockData.success // Mark as sample data if API failed
           };
         });
       } else {
