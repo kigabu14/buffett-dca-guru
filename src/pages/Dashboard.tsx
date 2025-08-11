@@ -128,7 +128,7 @@ const Dashboard = () => {
     avgChange: stockData.length > 0 ? 
       stockData
         .filter(s => s.changePercent != null)
-        .reduce((sum, s) => sum + (s.changePercent || 0), 0) / 
+        .reduce((sum, s) => sum + s.changePercent!, 0) / 
         stockData.filter(s => s.changePercent != null).length || 0 : 0
   };
 
