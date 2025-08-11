@@ -7,129 +7,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Yahoo Finance API endpoints - Updated for yfinance 2.0.0 compatibility
+// Yahoo Finance API endpoints
 const YAHOO_FINANCE_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart';
-const YAHOO_FINANCE_QUOTE = 'https://query1.finance.yahoo.com/v1/finance/screener';
+const YAHOO_FINANCE_QUOTE = 'https://query2.finance.yahoo.com/v1/finance/screener';
 const YAHOO_FINANCE_QUOTESUMMARY = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary';
-const YAHOO_FINANCE_DIVIDENDS = 'https://query1.finance.yahoo.com/v7/finance/download';
-
-// Enhanced request configuration for better reliability
-const REQUEST_CONFIG = {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Accept': 'application/json',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1'
-  },
-  timeout: 15000 // 15 second timeout
-};
-
-// Enhanced retry mechanism for better reliability (yfinance 2.0.0 compatibility)
-async function fetchWithRetry(url: string, options: any = {}, maxRetries: number = 3): Promise<Response> {
-  let lastError: Error;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Attempt ${attempt}/${maxRetries} for: ${url}`);
-      
-      const response = await fetch(url, {
-        ...REQUEST_CONFIG,
-        ...options
-      });
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-          // Rate limited - wait longer on each retry
-          const waitTime = attempt * 2000;
-          console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-        
-        if (response.status >= 500) {
-          // Server error - retry
-          console.log(`Server error ${response.status}, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-          continue;
-        }
-        
-        // Client error - don't retry
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return response;
-    } catch (error) {
-      lastError = error;
-      console.error(`Attempt ${attempt} failed:`, error.message);
-      
-      if (attempt < maxRetries) {
-        const waitTime = 1000 * attempt; // Exponential backoff
-        console.log(`Waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-    }
-  }
-  
-  throw lastError;
-}
+const YAHOO_FINANCE_DIVIDENDS = 'https://query2.finance.yahoo.com/v7/finance/download';
 
 // Fetch comprehensive financial data from multiple Yahoo Finance endpoints
 async function fetchFinancialData(symbol: string) {
   try {
     console.log(`Fetching data for ${symbol} from Yahoo Finance`);
     
-    // Clean symbol for different markets - Enhanced for yfinance 2.0.0 compatibility
-    let cleanSymbol = symbol.trim().toUpperCase();
+    // Clean symbol for different markets
+    let cleanSymbol = symbol.trim();
     
-    // Handle different market suffixes more robustly
+    // For Thai stocks, ensure .BK suffix
     if (symbol.includes('.BK') || symbol.includes('.SET')) {
-      // Thai stock market
       if (!cleanSymbol.includes('.BK')) {
         cleanSymbol = cleanSymbol.replace('.SET', '.BK');
         if (!cleanSymbol.includes('.BK')) {
           cleanSymbol = cleanSymbol + '.BK';
         }
       }
-    } else if (symbol.includes('.TO') || symbol.includes('.TSE')) {
-      // Toronto Stock Exchange
-      if (!cleanSymbol.includes('.TO')) {
-        cleanSymbol = cleanSymbol.replace('.TSE', '.TO');
-        if (!cleanSymbol.includes('.TO')) {
-          cleanSymbol = cleanSymbol + '.TO';
-        }
-      }
-    } else if (symbol.includes('.L') || symbol.includes('.LON')) {
-      // London Stock Exchange
-      if (!cleanSymbol.includes('.L')) {
-        cleanSymbol = cleanSymbol.replace('.LON', '.L');
-        if (!cleanSymbol.includes('.L')) {
-          cleanSymbol = cleanSymbol + '.L';
-        }
-      }
     }
 
     console.log(`Using symbol: ${cleanSymbol}`);
 
-    // Fetch from multiple endpoints with improved error handling
-    const [chartData, summaryData] = await Promise.allSettled([
+    // Fetch from multiple endpoints in parallel
+    const [chartData, summaryData] = await Promise.all([
       fetchChartData(cleanSymbol),
       fetchQuoteSummary(cleanSymbol)
     ]);
 
-    // Handle settled promises
-    const chartResult = chartData.status === 'fulfilled' ? chartData.value : null;
-    const summaryResult = summaryData.status === 'fulfilled' ? summaryData.value : null;
-
-    if (chartData.status === 'rejected') {
-      console.warn(`Chart data failed for ${cleanSymbol}:`, chartData.reason);
-    }
-    if (summaryData.status === 'rejected') {
-      console.warn(`Summary data failed for ${cleanSymbol}:`, summaryData.reason);
-    }
-
-    return parseComprehensiveData(chartResult, summaryResult, symbol, cleanSymbol);
+    return parseComprehensiveData(chartData, summaryData, symbol, cleanSymbol);
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
@@ -137,15 +47,25 @@ async function fetchFinancialData(symbol: string) {
   }
 }
 
-// Fetch chart data (price, volume, etc.) - Enhanced for yfinance 2.0.0 compatibility
+// Fetch chart data (price, volume, etc.)
 async function fetchChartData(symbol: string) {
   const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
   
-  const response = await fetchWithRetry(chartUrl);
+  const response = await fetch(chartUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chart API HTTP error! status: ${response.status}`);
+  }
+  
   return await response.json();
 }
 
-// Fetch quote summary data (financial metrics, P/E, dividend info, etc.) - Enhanced for yfinance 2.0.0 compatibility
+// Fetch quote summary data (financial metrics, P/E, dividend info, etc.)
 async function fetchQuoteSummary(symbol: string) {
   const modules = [
     'defaultKeyStatistics',
@@ -153,15 +73,24 @@ async function fetchQuoteSummary(symbol: string) {
     'summaryDetail',
     'quoteType',
     'price',
-    'summaryProfile',
-    'calendarEvents', // Added for better dividend tracking
-    'upgradeDowngradeHistory' // Added for analyst data
+    'summaryProfile'
   ].join(',');
   
   const summaryUrl = `${YAHOO_FINANCE_QUOTESUMMARY}/${symbol}?modules=${modules}`;
   
   try {
-    const response = await fetchWithRetry(summaryUrl);
+    const response = await fetch(summaryUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
+      return null;
+    }
+    
     return await response.json();
   } catch (error) {
     console.warn(`Error fetching summary for ${symbol}:`, error);
@@ -171,56 +100,36 @@ async function fetchQuoteSummary(symbol: string) {
 
 function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
   try {
-    // Enhanced error handling - check for valid chart data
     const result = chartData?.chart?.result?.[0];
     if (!result) {
-      console.warn(`No valid chart data for ${originalSymbol}, using fallback`);
-      return createFallbackData(originalSymbol);
+      throw new Error('No chart data found');
     }
 
     const meta = result.meta;
     const quotes = result.indicators?.quote?.[0];
     
     if (!meta) {
-      console.warn(`Invalid chart data structure for ${originalSymbol}, using fallback`);
-      return createFallbackData(originalSymbol);
+      throw new Error('Invalid chart data structure');
     }
 
-    // Extract basic price data with enhanced fallback logic
+    // Extract basic price data
     const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
-    const previousClose = meta.previousClose || meta.chartPreviousClose || currentPrice;
+    const previousClose = meta.previousClose || currentPrice;
     const change = currentPrice - previousClose;
     const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
 
-    // Enhanced market and currency detection
+    // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const isCanadianStock = originalSymbol.includes('.TO') || originalSymbol.includes('.TSE');
-    const isUKStock = originalSymbol.includes('.L') || originalSymbol.includes('.LON');
-    
-    let market = 'NASDAQ';
-    let currency = 'USD';
-    
-    if (isThaiStock) {
-      market = 'SET';
-      currency = 'THB';
-    } else if (isCanadianStock) {
-      market = 'TSX';
-      currency = 'CAD';
-    } else if (isUKStock) {
-      market = 'LSE';
-      currency = 'GBP';
-    } else {
-      market = meta.exchangeName || 'NASDAQ';
-      currency = meta.currency || 'USD';
-    }
+    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
+    const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
 
-    // Get latest quote data from chart with better error handling
+    // Get latest quote data from chart
     const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
     const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
     const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
     const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
 
-    // Extract financial data from summary API with enhanced error handling
+    // Extract financial data from summary API
     let financialData = {};
     let dividendData = {};
     let keyStats = {};
@@ -228,27 +137,22 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
     if (summaryData?.quoteSummary?.result?.[0]) {
       const summaryResult = summaryData.quoteSummary.result[0];
       
-      // Financial metrics with better fallback values
+      // Financial metrics
       const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
       const financialInfo = summaryResult.financialData || {};
       const summaryDetail = summaryResult.summaryDetail || {};
       const price = summaryResult.price || {};
-      const calendarEvents = summaryResult.calendarEvents || {};
-      
-      // Enhanced financial metrics calculation
-      const marketCapRaw = price.marketCap?.raw || meta.marketCap;
-      const peRatio = defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
-                    summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw;
-      const epsValue = defaultKeyStats.trailingEps?.raw || financialInfo.trailingEps?.raw;
       
       financialData = {
-        marketCap: marketCapRaw || (currentPrice * (defaultKeyStats.sharesOutstanding?.raw || 1000000000)),
-        pe: peRatio || (epsValue > 0 ? currentPrice / epsValue : 15.0),
-        eps: epsValue || (peRatio > 0 ? currentPrice / peRatio : currentPrice / 15.0),
-        bookValue: defaultKeyStats.bookValue?.raw || (currentPrice * 0.8),
+        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
+        pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
+            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
+        eps: defaultKeyStats.trailingEps?.raw || 
+             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
+        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
         priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
         
-        // Financial health metrics with better defaults
+        // Financial health metrics
         profitMargin: financialInfo.profitMargins?.raw || 0.15,
         operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
         returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
@@ -260,20 +164,18 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
         earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
       };
       
-      // Enhanced dividend information with better date handling
+      // Dividend information
       dividendData = {
         dividendYield: summaryDetail.dividendYield?.raw || 
                       summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
         dividendRate: summaryDetail.dividendRate?.raw || 
                      summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
-        exDividendDate: formatDividendDate(summaryDetail.exDividendDate) || 
-                       formatDividendDate(calendarEvents.exDividendDate),
-        dividendDate: formatDividendDate(summaryDetail.dividendDate) || 
-                     formatDividendDate(calendarEvents.dividendDate),
+        exDividendDate: summaryDetail.exDividendDate?.fmt || null,
+        dividendDate: summaryDetail.dividendDate?.fmt || null,
         payoutRatio: summaryDetail.payoutRatio?.raw || null
       };
       
-      // Additional key statistics with enhanced 52-week range
+      // Additional key statistics
       keyStats = {
         fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
                          defaultKeyStats.fiftyTwoWeekHigh?.raw || 
@@ -284,39 +186,6 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
         beta: defaultKeyStats.beta?.raw || 1.0,
         sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
                           price.sharesOutstanding?.raw || 1000000000
-      };
-    } else {
-      // Use fallback values when summary data is not available
-      console.warn(`No summary data available for ${originalSymbol}, using defaults`);
-      
-      financialData = {
-        marketCap: currentPrice * 1000000000,
-        pe: 15.0,
-        eps: currentPrice / 15.0,
-        bookValue: currentPrice * 0.8,
-        priceToBook: 1.5,
-        profitMargin: 0.15,
-        operatingMargin: 0.20,
-        returnOnEquity: 0.15,
-        debtToEquity: 0.5,
-        currentRatio: 2.0,
-        revenueGrowth: 0.1,
-        earningsGrowth: 0.1
-      };
-      
-      dividendData = {
-        dividendYield: 0.03,
-        dividendRate: currentPrice * 0.03,
-        exDividendDate: null,
-        dividendDate: null,
-        payoutRatio: null
-      };
-      
-      keyStats = {
-        fiftyTwoWeekHigh: currentPrice * 1.3,
-        fiftyTwoWeekLow: currentPrice * 0.7,
-        beta: 1.0,
-        sharesOutstanding: 1000000000
       };
     }
 
@@ -377,50 +246,11 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
   }
 }
 
-// Helper function to format dividend dates properly
-function formatDividendDate(dateValue: any): string | null {
-  if (!dateValue) return null;
-  
-  try {
-    if (dateValue.fmt) return dateValue.fmt;
-    if (dateValue.raw) {
-      const date = new Date(dateValue.raw * 1000); // Convert Unix timestamp
-      return date.toISOString().split('T')[0];
-    }
-    if (typeof dateValue === 'string') return dateValue;
-    if (typeof dateValue === 'number') {
-      const date = new Date(dateValue * 1000);
-      return date.toISOString().split('T')[0];
-    }
-  } catch (error) {
-    console.warn('Error formatting dividend date:', error);
-  }
-  
-  return null;
-}
-
 function createFallbackData(symbol: string) {
   const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
-  const isCanadianStock = symbol.includes('.TO') || symbol.includes('.TSE');
-  const isUKStock = symbol.includes('.L') || symbol.includes('.LON');
-  
-  let market = 'NASDAQ';
-  let currency = 'USD';
-  let fallbackPrice = 100.0;
-  
-  if (isThaiStock) {
-    market = 'SET';
-    currency = 'THB';
-    fallbackPrice = 10.0;
-  } else if (isCanadianStock) {
-    market = 'TSX';
-    currency = 'CAD';
-    fallbackPrice = 75.0;
-  } else if (isUKStock) {
-    market = 'LSE';
-    currency = 'GBP';
-    fallbackPrice = 80.0;
-  }
+  const market = isThaiStock ? 'SET' : 'NASDAQ';
+  const currency = isThaiStock ? 'THB' : 'USD';
+  const fallbackPrice = isThaiStock ? 10.0 : 100.0;
   
   return {
     symbol: symbol,
@@ -438,7 +268,7 @@ function createFallbackData(symbol: string) {
     dayLow: fallbackPrice * 0.98,
     volume: 0,
     
-    // Financial metrics with market-appropriate defaults
+    // Financial metrics with defaults
     marketCap: fallbackPrice * 1000000000,
     pe: 15.0,
     eps: fallbackPrice / 15.0,
@@ -524,10 +354,8 @@ Deno.serve(async (req) => {
     const stockQuotes = [];
     const failedSymbols = [];
     
-    // Process symbols with controlled concurrency - Enhanced for yfinance 2.0.0 compatibility
-    const maxConcurrent = 2; // Reduced to be more conservative
-    const batchDelay = 1500; // Increased delay between batches
-    
+    // Process symbols with controlled concurrency
+    const maxConcurrent = 3;
     for (let i = 0; i < symbols.length; i += maxConcurrent) {
       const batch = symbols.slice(i, i + maxConcurrent);
       
@@ -538,9 +366,7 @@ Deno.serve(async (req) => {
           return { success: true, data: realData };
         } catch (error) {
           console.error(`Failed to fetch data for ${cleanSymbol}:`, error.message);
-          // Create fallback data for failed requests
-          const fallbackData = createFallbackData(cleanSymbol);
-          return { success: true, data: fallbackData }; // Return fallback as success to avoid total failure
+          return { success: false, symbol: cleanSymbol, error: error.message };
         }
       });
 
@@ -549,13 +375,14 @@ Deno.serve(async (req) => {
       batchResults.forEach(result => {
         if (result.success) {
           stockQuotes.push(result.data);
+        } else {
+          failedSymbols.push(result.symbol);
         }
       });
 
-      // Add delay between batches to avoid overwhelming Yahoo Finance
+      // Small delay between batches to avoid overwhelming Yahoo Finance
       if (i + maxConcurrent < symbols.length) {
-        console.log(`Processed batch ${Math.floor(i / maxConcurrent) + 1}, waiting ${batchDelay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, batchDelay));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
