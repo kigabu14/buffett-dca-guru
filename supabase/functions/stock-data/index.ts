@@ -8,10 +8,10 @@ const corsHeaders = {
 };
 
 // Yahoo Finance API endpoints
-const YAHOO_FINANCE_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
-const YAHOO_FINANCE_QUOTE = 'https://query1.finance.yahoo.com/v1/finance/screener';
-const YAHOO_FINANCE_QUOTESUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary';
-const YAHOO_FINANCE_DIVIDENDS = 'https://query1.finance.yahoo.com/v7/finance/download';
+const YAHOO_FINANCE_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart';
+const YAHOO_FINANCE_QUOTE = 'https://query2.finance.yahoo.com/v1/finance/screener';
+const YAHOO_FINANCE_QUOTESUMMARY = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary';
+const YAHOO_FINANCE_DIVIDENDS = 'https://query2.finance.yahoo.com/v7/finance/download';
 
 // Fetch comprehensive financial data from multiple Yahoo Finance endpoints
 async function fetchFinancialData(symbol: string) {
