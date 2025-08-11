@@ -53,21 +53,16 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
   
   // Fixed gain/loss calculation
   const currentPrice = stockData.price;
-  const gainLoss = buyPrice ? (currentPrice - buyPrice) : 0;
-  const gainLossPercent = buyPrice && buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0;
+  const gainLoss = buyPrice && currentPrice !== null ? (currentPrice - buyPrice) : 0;
+  const gainLossPercent = buyPrice && buyPrice > 0 && currentPrice !== null ? ((currentPrice - buyPrice) / buyPrice) * 100 : 0;
 
   return (
     <div className={`space-y-2 ${className}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-semibold">
-            {stockData.symbol.includes('.BK') ? '฿' : '$'}{stockData.price.toFixed(2)}
+            {YahooFinanceService.formatDisplayPrice(stockData.price, stockData.currency)}
           </span>
-          {stockData.isSampleData && (
-            <Badge variant="secondary" className="text-xs">
-              ตัวอย่าง
-            </Badge>
-          )}
         </div>
         <Button
           size="sm"
@@ -80,18 +75,26 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
       </div>
       
       <div className="flex items-center justify-between text-sm">
-        <div className={`flex items-center gap-1 ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          <span>{change >= 0 ? '+' : ''}{change.toFixed(2)}</span>
-          <span>({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+        <div className={`flex items-center gap-1 ${change !== null && change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          {change !== null ? (
+            <>
+              <span>{change >= 0 ? '+' : ''}{YahooFinanceService.formatNumber(change)}</span>
+              {changePercent !== null && (
+                <span>({changePercent >= 0 ? '+' : ''}{YahooFinanceService.formatNumber(changePercent)}%)</span>
+              )}
+            </>
+          ) : (
+            <span>-</span>
+          )}
         </div>
         
-        {buyPrice && buyPrice > 0 && (
+        {buyPrice && buyPrice > 0 && currentPrice !== null && (
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
             <span>
-              {gainLoss >= 0 ? '+' : ''}{stockData.symbol.includes('.BK') ? '฿' : '$'}{gainLoss.toFixed(2)}
+              {gainLoss >= 0 ? '+' : ''}{YahooFinanceService.formatDisplayPrice(gainLoss, stockData.currency)}
             </span>
-            <span>({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(2)}%)</span>
+            <span>({gainLossPercent >= 0 ? '+' : ''}{YahooFinanceService.formatNumber(gainLossPercent)}%)</span>
           </div>
         )}
       </div>
