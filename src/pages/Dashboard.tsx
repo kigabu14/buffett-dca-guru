@@ -49,17 +49,26 @@ const Dashboard = () => {
       if (error) throw error;
       
       // Fetch current prices from Yahoo Finance for accurate calculation
+      // Remove fallback to buy_price when live missing as per requirements
+      // เอา fallback ไปยัง buy_price ออกเมื่อข้อมูล live หายไปตามข้อกำหนด
       if (data && data.length > 0) {
         const symbols = [...new Set(data.map(stock => stock.symbol))];
         try {
           const stockPrices = await YahooFinanceService.getStocks(symbols);
-          const priceMap = new Map(stockPrices.map(s => [s.symbol, s.price]));
+          const priceMap = new Map(stockPrices.map(s => [s.symbol, s]));
           
-          // Update stocks with current prices
-          const updatedStocks = data.map(stock => ({
-            ...stock,
-            current_price_yahoo: priceMap.get(stock.symbol) || stock.current_price || stock.buy_price
-          }));
+          // Update stocks with current prices - set current_price_yahoo to live price or null
+          // อัปเดตหุ้นด้วยราคาปัจจุบัน - ตั้งค่า current_price_yahoo เป็นราคา live หรือ null
+          const updatedStocks = data.map(stock => {
+            const liveData = priceMap.get(stock.symbol);
+            return {
+              ...stock,
+              current_price_yahoo: liveData?.price ?? null, // Use null when live price missing
+              currency: liveData?.currency || (stock.symbol.includes('.BK') ? 'THB' : 'USD'),
+              change: liveData?.change ?? null,
+              changePercent: liveData?.changePercent ?? null
+            };
+          });
           
           setUserStocks(updatedStocks);
         } catch (error) {
@@ -105,7 +114,8 @@ const Dashboard = () => {
     return "bg-red-100 text-red-800";
   };
 
-  const getPriceChangeColor = (change: number) => {
+  const getPriceChangeColor = (change: number | null) => {
+    if (change == null) return "text-muted-foreground";
     if (change > 0) return "text-green-600";
     if (change < 0) return "text-red-600";
     return "text-muted-foreground";
@@ -113,10 +123,13 @@ const Dashboard = () => {
 
   const marketStats = {
     totalStocks: stockData.length,
-    gainers: stockData.filter(s => s.changePercent > 0).length,
-    losers: stockData.filter(s => s.changePercent < 0).length,
+    gainers: stockData.filter(s => s.changePercent != null && s.changePercent > 0).length,
+    losers: stockData.filter(s => s.changePercent != null && s.changePercent < 0).length,
     avgChange: stockData.length > 0 ? 
-      stockData.reduce((sum, s) => sum + s.changePercent, 0) / stockData.length : 0
+      stockData
+        .filter(s => s.changePercent != null)
+        .reduce((sum, s) => sum + (s.changePercent || 0), 0) / 
+        stockData.filter(s => s.changePercent != null).length || 0 : 0
   };
 
   return (
@@ -242,7 +255,12 @@ const Dashboard = () => {
                     <div className="flex justify-between text-sm">
                       <span>ราคาปัจจุบัน:</span>
                       <span className="font-medium">
-                        {stock.symbol.includes('.BK') ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
+                        {/* Display '-' for missing price, determine currency using stock.currency */}
+                        {/* แสดง '-' สำหรับราคาที่หายไป กำหนดสกุลเงินโดยใช้ stock.currency */}
+                        {YahooFinanceService.formatDisplayPrice(
+                          stock.current_price_yahoo, 
+                          stock.currency || (stock.symbol.includes('.BK') ? 'THB' : 'USD')
+                        )}
                       </span>
                     </div>
                     <RealTimeStockPrice 
@@ -310,22 +328,28 @@ const Dashboard = () => {
                         {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.change)}`}>
-                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                        {/* Display '-' for null change - แสดง '-' สำหรับ change ที่เป็น null */}
+                        {stock.change != null ? `${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}` : '-'}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.changePercent)}`}>
-                        {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                        {/* Display '-' for null changePercent - แสดง '-' สำหรับ changePercent ที่เป็น null */}
+                        {stock.changePercent != null ? `${stock.changePercent >= 0 ? '+' : ''}${stock.changePercent.toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.volume > 0 ? YahooFinanceService.formatLargeNumber(stock.volume) : '-'}
+                        {/* Use formatLargeNumber which handles null - ใช้ formatLargeNumber ที่จัดการ null */}
+                        {YahooFinanceService.formatLargeNumber(stock.volume)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.pe > 0 ? stock.pe.toFixed(2) : '-'}
+                        {/* Check != null instead of > 0 for P/E - ตรวจสอบ != null แทน > 0 สำหรับ P/E */}
+                        {stock.pe != null ? stock.pe.toFixed(2) : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.weekHigh52 > 0 ? YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency) : '-'}
+                        {/* Use formatCurrency which handles null - ใช้ formatCurrency ที่จัดการ null */}
+                        {YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.weekLow52 > 0 ? YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency) : '-'}
+                        {/* Use formatCurrency which handles null - ใช้ formatCurrency ที่จัดการ null */}
+                        {YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className={getDCAScoreColor(dcaScore)}>

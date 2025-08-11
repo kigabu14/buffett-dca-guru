@@ -51,6 +51,13 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
 
     if (!stockToUse || !amount || !duration) return;
 
+    // Check if current price is null - cannot perform DCA simulation
+    // ตรวจสอบว่าราคาปัจจุบันเป็น null - ไม่สามารถทำการจำลอง DCA ได้
+    if (stockToUse.price == null) {
+      alert("ไม่สามารถทำการจำลอง DCA ได้เนื่องจากไม่มีข้อมูลราคาปัจจุบัน");
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -61,15 +68,30 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
                           frequency === 'monthly' ? months : months * 30;
 
       // Get historical data for more accurate simulation
+      // ดึงข้อมูลประวัติศาสตร์เพื่อการจำลองที่แม่นยำยิ่งขึ้น
       let historicalPrices: number[] = [];
+      let hasHistoricalData = false;
+      
       try {
         const historicalData = await YahooFinanceService.getHistoricalData(stockToUse.symbol, '1y');
         if (historicalData && historicalData.length > 0) {
           // Use actual historical prices for the simulation
           historicalPrices = historicalData.map(d => d.price).slice(-totalPeriods);
+          hasHistoricalData = historicalPrices.length >= Math.min(totalPeriods, 30); // Need at least 30 data points or total periods
         }
       } catch (error) {
-        console.warn('Could not fetch historical data, using simulated prices:', error);
+        console.warn('Could not fetch historical data:', error);
+      }
+
+      // Stop DCA simulation if historical data is insufficient as per requirements
+      // หยุดการจำลอง DCA หากข้อมูลประวัติศาสตร์ไม่เพียงพอตามข้อกำหนด
+      if (!hasHistoricalData) {
+        alert(
+          `ไม่สามารถทำการจำลอง DCA ได้เนื่องจากข้อมูลประวัติศาสตร์ไม่เพียงพอ\n` +
+          `กรุณาเลือกหุ้นที่มีข้อมูลประวัติศาสตร์เพียงพอ`
+        );
+        setLoading(false);
+        return;
       }
 
       let totalShares = 0;
@@ -80,22 +102,22 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
         let price: number;
         
         if (historicalPrices.length > i) {
-          // Use actual historical price
+          // Use actual historical price only
+          // ใช้ราคาประวัติศาสตร์จริงเท่านั้น
           price = historicalPrices[i];
         } else {
-          // Fallback to simulation with realistic volatility
-          const volatility = 0.015; // 1.5% volatility per period (more realistic)
-          const randomFactor = 1 + (Math.random() - 0.5) * volatility * 2;
-          const trendFactor = 1 + (Math.random() * 0.001); // very small random trend
-          price = stockToUse.price * randomFactor * trendFactor;
+          // If we run out of historical data, use the last available price
+          // หากข้อมูลประวัติศาสตร์หมด ให้ใช้ราคาล่าสุดที่มี
+          price = historicalPrices[historicalPrices.length - 1] || stockToUse.price;
         }
         
         const shares = investmentAmount / price;
         totalShares += shares;
         totalInvested += investmentAmount;
         
-        // Calculate dividends (quarterly payments) - more accurate calculation
-        if (stockToUse.dividendYield && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
+        // Calculate dividends (quarterly payments) - only if dividendYield is not null
+        // คำนวณเงินปันผล (จ่ายรายไตรมาส) - เฉพาะเมื่อ dividendYield ไม่เป็น null
+        if (stockToUse.dividendYield != null && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
           const quarterlyDividendRate = (stockToUse.dividendYield / 100) / 4; // Convert percentage to decimal
           const currentSharesForDividend = totalShares; // Total shares at this point
           totalDividends += currentSharesForDividend * price * quarterlyDividendRate;
@@ -120,12 +142,13 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       });
     } catch (error) {
       console.error('Error calculating DCA:', error);
+      alert('เกิดข้อผิดพลาดในการคำนวณ DCA กรุณาลองใหม่อีกครั้ง');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null) => {
     const currency = selectedStock?.currency || (symbol?.includes('.BK') ? 'THB' : 'USD');
     return YahooFinanceService.formatCurrency(value, currency);
   };

@@ -60,12 +60,15 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
   const [stockData, setStockData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Auto-fetch stock data when symbol changes
+  // Auto-fetch stock data when symbol changes - ดึงข้อมูลหุ้นอัตโนมัติเมื่อ symbol เปลี่ยน
+  // Updated to not auto-fill buy_price when current price is null - อัปเดตเพื่อไม่ auto-fill buy_price เมื่อราคาปัจจุบันเป็น null
   useEffect(() => {
     const fetchStockData = async () => {
       if (symbol && symbol.length > 2) {
         setLoading(true);
         try {
+          // Normalize Thai symbols: if market === 'SET' and symbol lacks .BK append before fetch
+          // ปรับ symbol ไทย: หาก market === 'SET' และ symbol ไม่มี .BK ให้เพิ่มก่อนการดึงข้อมูล
           const searchSymbol = market === 'SET' && !symbol.includes('.BK') 
             ? symbol + '.BK' 
             : symbol;
@@ -73,15 +76,19 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
           const data = await YahooFinanceService.getStock(searchSymbol);
           setStockData(data);
           
+          // Only auto-fill company name if not already provided
+          // เติมชื่อบริษัทอัตโนมัติเฉพาะเมื่อยังไม่มี
           if (data.name && !companyName) {
             setCompanyName(data.name);
           }
           
-          if (data.price && !buyPrice && !editingInvestment) {
-            setBuyPrice(data.price.toString());
-          }
+          // Remove auto-fill of buy_price when current price is null as per requirements
+          // เอาการ auto-fill ราคาซื้อออกเมื่อราคาปัจจุบันเป็น null ตามข้อกำหนด
+          // Do not auto-fill buy_price
           
-          if (data.dividendYield && !dividendYieldAtPurchase) {
+          // Only auto-fill dividend yield if available and not null
+          // เติมอัตราเงินปันผลอัตโนมัติเฉพาะเมื่อมีข้อมูลและไม่เป็น null
+          if (data.dividendYield != null && data.dividendYield > 0 && !dividendYieldAtPurchase) {
             setDividendYieldAtPurchase((data.dividendYield * 100).toFixed(2));
           }
         } catch (error) {
@@ -107,15 +114,17 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
 
   const commission = calculateCommission();
 
-  // Calculate totals
+  // Calculate totals - คำนวณยอดรวม
+  // Handle null values properly - จัดการค่า null อย่างถูกต้อง
   const totalCost = quantity && buyPrice ? 
     (parseFloat(quantity) * parseFloat(buyPrice)) + commission : 0;
   
-  const currentValue = quantity && stockData?.price ? 
-    parseFloat(quantity) * stockData.price : 0;
+  const currentValue = quantity && stockData?.price != null ? 
+    parseFloat(quantity) * stockData.price : null;
     
-  const potentialGainLoss = currentValue && totalCost ? currentValue - totalCost : 0;
-  const potentialGainLossPercent = totalCost > 0 ? (potentialGainLoss / totalCost) * 100 : 0;
+  const potentialGainLoss = currentValue != null && totalCost ? currentValue - totalCost : null;
+  const potentialGainLossPercent = totalCost > 0 && potentialGainLoss != null ? 
+    (potentialGainLoss / totalCost) * 100 : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
