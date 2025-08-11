@@ -55,10 +55,11 @@ const Dashboard = () => {
           const stockPrices = await YahooFinanceService.getStocks(symbols);
           const priceMap = new Map(stockPrices.map(s => [s.symbol, s.price]));
           
-          // Update stocks with current prices
+          // Update stocks with current prices - only use live price if available, null otherwise
+          // ไม่ใช้ current_price หรือ buy_price เป็น fallback - ให้เป็น null เพื่อแสดงเป็น '-'
           const updatedStocks = data.map(stock => ({
             ...stock,
-            current_price_yahoo: priceMap.get(stock.symbol) || stock.current_price || stock.buy_price
+            current_price_yahoo: priceMap.get(stock.symbol) ?? null
           }));
           
           setUserStocks(updatedStocks);
@@ -105,7 +106,8 @@ const Dashboard = () => {
     return "bg-red-100 text-red-800";
   };
 
-  const getPriceChangeColor = (change: number) => {
+  const getPriceChangeColor = (change: number | null) => {
+    if (change == null) return "text-muted-foreground";
     if (change > 0) return "text-green-600";
     if (change < 0) return "text-red-600";
     return "text-muted-foreground";
@@ -113,10 +115,11 @@ const Dashboard = () => {
 
   const marketStats = {
     totalStocks: stockData.length,
-    gainers: stockData.filter(s => s.changePercent > 0).length,
-    losers: stockData.filter(s => s.changePercent < 0).length,
+    gainers: stockData.filter(s => s.changePercent != null && s.changePercent > 0).length,
+    losers: stockData.filter(s => s.changePercent != null && s.changePercent < 0).length,
     avgChange: stockData.length > 0 ? 
-      stockData.reduce((sum, s) => sum + s.changePercent, 0) / stockData.length : 0
+      stockData.filter(s => s.changePercent != null)
+        .reduce((sum, s) => sum + (s.changePercent || 0), 0) / Math.max(1, stockData.filter(s => s.changePercent != null).length) : 0
   };
 
   return (
@@ -236,13 +239,16 @@ const Dashboard = () => {
                     <div className="flex justify-between text-sm">
                       <span>ราคาซื้อ:</span>
                       <span>
-                        {stock.symbol.includes('.BK') ? '฿' : '$'}{stock.buy_price.toFixed(2)}
+                        {(stock.market === 'SET' || stock.symbol.endsWith('.BK')) ? '฿' : '$'}{stock.buy_price.toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>ราคาปัจจุบัน:</span>
                       <span className="font-medium">
-                        {stock.symbol.includes('.BK') ? '฿' : '$'}{(stock.current_price_yahoo || stock.current_price || stock.buy_price).toFixed(2)}
+                        {stock.current_price_yahoo != null ? 
+                          `${(stock.market === 'SET' || stock.symbol.endsWith('.BK')) ? '฿' : '$'}${stock.current_price_yahoo.toFixed(2)}` : 
+                          '-'
+                        }
                       </span>
                     </div>
                     <RealTimeStockPrice 
@@ -310,22 +316,28 @@ const Dashboard = () => {
                         {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.change)}`}>
-                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                        {stock.change != null ? 
+                          `${stock.change >= 0 ? '+' : ''}${YahooFinanceService.formatNullableNumber(stock.change)}` : 
+                          '-'
+                        }
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.changePercent)}`}>
-                        {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                        {stock.changePercent != null ? 
+                          `${stock.changePercent >= 0 ? '+' : ''}${YahooFinanceService.formatNullableNumber(stock.changePercent)}%` : 
+                          '-'
+                        }
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.volume > 0 ? YahooFinanceService.formatLargeNumber(stock.volume) : '-'}
+                        {YahooFinanceService.formatLargeNumber(stock.volume)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.pe > 0 ? stock.pe.toFixed(2) : '-'}
+                        {YahooFinanceService.formatNullableNumber(stock.pe)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.weekHigh52 > 0 ? YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency) : '-'}
+                        {YahooFinanceService.formatCurrency(stock.weekHigh52, stock.currency)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {stock.weekLow52 > 0 ? YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency) : '-'}
+                        {YahooFinanceService.formatCurrency(stock.weekLow52, stock.currency)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className={getDCAScoreColor(dcaScore)}>

@@ -9,18 +9,18 @@ interface DividendInfoProps {
 }
 
 export const DividendInfo = ({ stock }: DividendInfoProps) => {
-  const formatDividendYield = (yieldValue: number) => {
-    if (yieldValue <= 0) return '-';
+  const formatDividendYield = (yieldValue: number | null) => {
+    if (yieldValue == null || yieldValue <= 0) return '-';
     return `${(yieldValue * 100).toFixed(2)}%`;
   };
 
-  const formatDividendRate = (rate: number, currency: string) => {
-    if (rate <= 0) return '-';
+  const formatDividendRate = (rate: number | null, currency?: string) => {
+    if (rate == null || rate <= 0) return '-';
     return YahooFinanceService.formatCurrency(rate, currency);
   };
 
-  const formatPriceRange = (low: number, high: number, currency: string) => {
-    if (low <= 0 || high <= 0) return '-';
+  const formatPriceRange = (low: number | null, high: number | null, currency?: string) => {
+    if (low == null || high == null || low <= 0 || high <= 0) return '-';
     return `${YahooFinanceService.formatCurrency(low, currency)} - ${YahooFinanceService.formatCurrency(high, currency)}`;
   };
 
@@ -100,7 +100,7 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
         </div>
 
         {/* Status Information */}
-        {stock.dividendYield > 0 && (
+        {stock.dividendYield != null && stock.dividendYield > 0 && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg">
             <div className="text-sm">
               <div className="font-semibold text-green-800 mb-1">สถานะเงินปันผล</div>
@@ -116,11 +116,11 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
           </div>
         )}
 
-        {stock.dividendYield <= 0 && (
+        {(stock.dividendYield == null || stock.dividendYield <= 0) && (
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <div className="text-sm text-gray-600">
               <div className="font-semibold mb-1">ไม่มีข้อมูลเงินปันผล</div>
-              <div>หุ้นนี้อาจไม่จ่ายเงินปันผล หรือไม่มีข้อมูลในระบบ</div>
+              <div>หุ้นนี้อาจไม่จ่ายเงินปันผล หรือไม่มีข้อมูลในระบบ (null หมายถึงไม่มีข้อมูลจาก backend)</div>
             </div>
           </div>
         )}

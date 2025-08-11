@@ -77,11 +77,14 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
             setCompanyName(data.name);
           }
           
-          if (data.price && !buyPrice && !editingInvestment) {
+          // Don't auto-populate buyPrice if fetched price is null
+          // ไม่ต้องใส่ราคาซื้ออัตโนมัติถ้าราคาที่ดึงมาเป็น null
+          if (data.price != null && !buyPrice && !editingInvestment) {
             setBuyPrice(data.price.toString());
           }
           
-          if (data.dividendYield && !dividendYieldAtPurchase) {
+          // Use returned currency where available
+          if (data.dividendYield != null && !dividendYieldAtPurchase) {
             setDividendYieldAtPurchase((data.dividendYield * 100).toFixed(2));
           }
         } catch (error) {
@@ -194,20 +197,27 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="font-semibold">{stockData.name}</h4>
-                <p className="text-sm text-muted-foreground">{stockData.market} • {stockData.currency}</p>
+                <p className="text-sm text-muted-foreground">{stockData.market} • {stockData.currency || 'ไม่ระบุ'}</p>
               </div>
               <div className="text-right">
-                        <div className="text-lg font-bold">
-                          ฿{stockData.price?.toFixed(2)}
-                        </div>
-                        <div className={`text-sm ${stockData.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {stockData.changePercent >= 0 ? '+' : ''}{stockData.changePercent?.toFixed(2)}%
-                        </div>
-                        {stockData.exDividendDate && (
-                          <div className="text-xs text-muted-foreground">
-                            Ex-Div: {new Date(stockData.exDividendDate).toLocaleDateString('th-TH')}
-                          </div>
-                        )}
+                <div className="text-lg font-bold">
+                  {stockData.price != null ? 
+                    `${stockData.currency === 'THB' ? '฿' : stockData.currency ? '$' : '฿'}${stockData.price.toFixed(2)}` : 
+                    'ไม่มีข้อมูลราคา'
+                  }
+                </div>
+                {stockData.changePercent != null ? (
+                  <div className={`text-sm ${stockData.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {stockData.changePercent >= 0 ? '+' : ''}{stockData.changePercent.toFixed(2)}%
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">ไม่มีข้อมูลการเปลี่ยนแปลง</div>
+                )}
+                {stockData.exDividendDate && (
+                  <div className="text-xs text-muted-foreground">
+                    Ex-Div: {new Date(stockData.exDividendDate).toLocaleDateString('th-TH')}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -297,7 +307,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
               min="0"
               step="0.01"
             />
-            {stockData?.dividendRate && (
+            {stockData?.dividendYield != null && stockData.dividendYield > 0 && (
               <p className="text-xs text-muted-foreground">
                 อัตราปันผลปัจจุบัน: {(stockData.dividendYield * 100).toFixed(2)}%
               </p>
