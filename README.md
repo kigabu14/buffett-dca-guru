@@ -71,3 +71,15 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+## Yahoo Finance Price Updates
+
+This project includes automatic price fetching from Yahoo Finance. See [Price Updates Documentation](docs/price_updates.md) for:
+
+- Database schema changes
+- Supabase Edge Function deployment
+- Symbol mapping rules (TH → .BK, JP → .T, US → no suffix)
+- Scheduling recommendations (every 30 minutes during market hours)
+- API usage examples and best practices
+
+**⚠️ Migration Note**: Do not edit existing migration files. The price fetching feature uses a new migration: `20250811034823_54e162de-651a-4128-96ef-9bc4b113bc8c.sql`
