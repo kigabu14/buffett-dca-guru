@@ -103,7 +103,7 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
             <span className="text-xs text-muted-foreground">กำไร/ขาดทุน:</span>
             <span>
               {gainLoss != null ? 
-                `${gainLoss >= 0 ? '+' : ''}${YahooFinanceService.formatDisplayPrice(gainLoss, stockData.currency)}` : 
+                `${gainLoss >= 0 ? '+' : ''}${YahooFinanceService.formatCurrency ? YahooFinanceService.formatCurrency(Math.abs(gainLoss), stockData.currency) : YahooFinanceService.formatDisplayPrice(Math.abs(gainLoss), stockData.currency)}` : 
                 '-'
               }
             </span>
