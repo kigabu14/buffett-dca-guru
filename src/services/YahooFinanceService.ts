@@ -32,6 +32,14 @@ export interface StockData {
   operatingMargin: number;
   currentRatio: number;
   
+  // Extended metrics (as specified in problem statement)
+  bookValue: number;
+  priceToBook: number;
+  beta: number;
+  payoutRatio: number | null;
+  revenueGrowth: number;
+  earningsGrowth: number;
+  
   // Sample data flag
   isSampleData?: boolean;
 }
@@ -65,15 +73,23 @@ export class YahooFinanceService {
 
       if (data?.data && data.data.length > 0) {
         const stockData = data.data[0];
+        
+        // Properly compute change/changePercent with fallback
+        const currentPrice = stockData.current_price || 0;
+        const previousClose = stockData.previous_close || 0;
+        const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
+        const changePercent = stockData.change_percent !== undefined ? 
+          stockData.change_percent : 
+          (previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0);
+        
         return {
           symbol: stockData.symbol,
           name: stockData.company_name || stockData.name || symbol,
           market: stockData.market,
-          currency: symbol.includes('.BK') ? 'THB' : 'USD',
-          price: stockData.current_price || 0,
-          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
-          changePercent: stockData.previous_close ? 
-            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
+          currency: stockData.currency || (symbol.includes('.BK') ? 'THB' : 'USD'),
+          price: currentPrice,
+          change: change,
+          changePercent: changePercent,
           marketCap: stockData.market_cap || 0,
           pe: stockData.pe_ratio || 0,
           eps: stockData.eps || 0,
@@ -93,6 +109,15 @@ export class YahooFinanceService {
           profitMargin: stockData.profit_margin || 0,
           operatingMargin: stockData.operating_margin || 0,
           currentRatio: stockData.current_ratio || 0,
+          
+          // Extended metrics mapping (snake_case to camelCase)
+          bookValue: stockData.book_value || 0,
+          priceToBook: stockData.price_to_book || 0,
+          beta: stockData.beta || 1.0,
+          payoutRatio: stockData.payout_ratio || null,
+          revenueGrowth: stockData.revenue_growth || 0,
+          earningsGrowth: stockData.earnings_growth || 0,
+          
           isSampleData: false
         };
       } else {
@@ -119,36 +144,54 @@ export class YahooFinanceService {
       }
 
       if (data?.data && data.data.length > 0) {
-        return data.data.map((stockData: any) => ({
-          symbol: stockData.symbol,
-          name: stockData.company_name || stockData.name || stockData.symbol,
-          market: stockData.market,
-          currency: stockData.symbol.includes('.BK') ? 'THB' : 'USD',
-          price: stockData.current_price || 0,
-          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
-          changePercent: stockData.previous_close ? 
-            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
-          marketCap: stockData.market_cap || 0,
-          pe: stockData.pe_ratio || 0,
-          eps: stockData.eps || 0,
-          dividendYield: stockData.dividend_yield || 0,
-          dividendRate: stockData.dividend_rate || 0,
-          exDividendDate: stockData.ex_dividend_date || null,
-          dividendDate: stockData.dividend_date || null,
-          earningsDate: stockData.earnings_date || null,
-          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
-          dayHigh: stockData.day_high || 0,
-          dayLow: stockData.day_low || 0,
-          weekHigh52: stockData.week_high_52 || 0,
-          weekLow52: stockData.week_low_52 || 0,
-          volume: stockData.volume || 0,
-          roe: stockData.roe || 0,
-          debtToEquity: stockData.debt_to_equity || 0,
-          profitMargin: stockData.profit_margin || 0,
-          operatingMargin: stockData.operating_margin || 0,
-          currentRatio: stockData.current_ratio || 0,
-          isSampleData: false
-        }));
+        return data.data.map((stockData: any) => {
+          // Properly compute change/changePercent with fallback
+          const currentPrice = stockData.current_price || 0;
+          const previousClose = stockData.previous_close || 0;
+          const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
+          const changePercent = stockData.change_percent !== undefined ? 
+            stockData.change_percent : 
+            (previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0);
+          
+          return {
+            symbol: stockData.symbol,
+            name: stockData.company_name || stockData.name || stockData.symbol,
+            market: stockData.market,
+            currency: stockData.currency || (stockData.symbol.includes('.BK') ? 'THB' : 'USD'),
+            price: currentPrice,
+            change: change,
+            changePercent: changePercent,
+            marketCap: stockData.market_cap || 0,
+            pe: stockData.pe_ratio || 0,
+            eps: stockData.eps || 0,
+            dividendYield: stockData.dividend_yield || 0,
+            dividendRate: stockData.dividend_rate || 0,
+            exDividendDate: stockData.ex_dividend_date || null,
+            dividendDate: stockData.dividend_date || null,
+            earningsDate: stockData.earnings_date || null,
+            forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
+            dayHigh: stockData.day_high || 0,
+            dayLow: stockData.day_low || 0,
+            weekHigh52: stockData.week_high_52 || 0,
+            weekLow52: stockData.week_low_52 || 0,
+            volume: stockData.volume || 0,
+            roe: stockData.roe || 0,
+            debtToEquity: stockData.debt_to_equity || 0,
+            profitMargin: stockData.profit_margin || 0,
+            operatingMargin: stockData.operating_margin || 0,
+            currentRatio: stockData.current_ratio || 0,
+            
+            // Extended metrics mapping (snake_case to camelCase)
+            bookValue: stockData.book_value || 0,
+            priceToBook: stockData.price_to_book || 0,
+            beta: stockData.beta || 1.0,
+            payoutRatio: stockData.payout_ratio || null,
+            revenueGrowth: stockData.revenue_growth || 0,
+            earningsGrowth: stockData.earnings_growth || 0,
+            
+            isSampleData: false
+          };
+        });
       } else {
         throw new Error('ไม่พบข้อมูลหุ้น');
       }

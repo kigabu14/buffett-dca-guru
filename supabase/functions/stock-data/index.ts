@@ -246,6 +246,61 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
   }
 }
 
+function createFallbackData(symbol: string) {
+  const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
+  const market = isThaiStock ? 'SET' : 'NASDAQ';
+  const currency = isThaiStock ? 'THB' : 'USD';
+  const fallbackPrice = isThaiStock ? 10.0 : 100.0;
+  
+  return {
+    symbol: symbol,
+    name: symbol,
+    price: fallbackPrice,
+    current_price: fallbackPrice,
+    change: 0,
+    changePercent: 0,
+    market: market,
+    currency: currency,
+    
+    // Price data
+    open: fallbackPrice,
+    dayHigh: fallbackPrice * 1.02,
+    dayLow: fallbackPrice * 0.98,
+    volume: 0,
+    
+    // Financial metrics with defaults
+    marketCap: fallbackPrice * 1000000000,
+    pe: 15.0,
+    eps: fallbackPrice / 15.0,
+    bookValue: fallbackPrice * 0.8,
+    priceToBook: 1.25,
+    
+    // Dividend data
+    dividendYield: 0.03,
+    dividendRate: fallbackPrice * 0.03,
+    exDividendDate: null,
+    dividendDate: null,
+    payoutRatio: null,
+    
+    // 52-week range
+    weekHigh52: fallbackPrice * 1.3,
+    weekLow52: fallbackPrice * 0.7,
+    beta: 1.0,
+    
+    // Financial health ratios
+    roe: 0.15,
+    profitMargin: 0.15,
+    operatingMargin: 0.20,
+    debtToEquity: 0.5,
+    currentRatio: 2.0,
+    
+    // Growth metrics
+    revenueGrowth: 0.1,
+    earningsGrowth: 0.1,
+    
+    success: false
+  };
+}
 
 
 function determineMarket(symbol: string): string {
@@ -352,9 +407,10 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Update stock_markets table (removed fields that don't exist in the table)
+    // Update stock_markets table with extended metrics
     const updatePromises = stockQuotes.map(async (quote) => {
-      const stockData = {
+      // Build dbData for database upsert with all extended fields
+      const dbData = {
         symbol: quote.symbol,
         company_name: quote.name,
         market: quote.market,
@@ -369,12 +425,34 @@ Deno.serve(async (req) => {
         pe_ratio: quote.pe,
         eps: quote.eps,
         dividend_yield: quote.dividendYield,
+        
+        // Extended metrics
+        currency: quote.currency,
+        change: quote.change,
+        change_percent: quote.changePercent,
+        week_high_52: quote.weekHigh52,
+        week_low_52: quote.weekLow52,
+        dividend_rate: quote.dividendRate,
+        ex_dividend_date: quote.exDividendDate,
+        dividend_date: quote.dividendDate,
+        payout_ratio: quote.payoutRatio,
+        book_value: quote.bookValue,
+        price_to_book: quote.priceToBook,
+        beta: quote.beta,
+        roe: quote.roe,
+        profit_margin: quote.profitMargin,
+        operating_margin: quote.operatingMargin,
+        debt_to_equity: quote.debtToEquity,
+        current_ratio: quote.currentRatio,
+        revenue_growth: quote.revenueGrowth,
+        earnings_growth: quote.earningsGrowth,
+        
         last_updated: new Date().toISOString()
       };
 
       const { error } = await supabase
         .from('stock_markets')
-        .upsert(stockData, { 
+        .upsert(dbData, { 
           onConflict: 'symbol',
           ignoreDuplicates: false 
         });
@@ -383,17 +461,56 @@ Deno.serve(async (req) => {
         console.error(`Error updating ${quote.symbol}:`, error);
       }
 
-      return stockData;
+      // Build apiData for response (snake_case)
+      return {
+        symbol: quote.symbol,
+        company_name: quote.name,
+        market: quote.market,
+        sector: mapSector(quote.symbol),
+        current_price: quote.price,
+        previous_close: quote.price - quote.change,
+        open_price: quote.open,
+        day_high: quote.dayHigh,
+        day_low: quote.dayLow,
+        volume: quote.volume,
+        market_cap: quote.marketCap,
+        pe_ratio: quote.pe,
+        eps: quote.eps,
+        dividend_yield: quote.dividendYield,
+        
+        // Extended metrics in snake_case for frontend consumption
+        currency: quote.currency,
+        change: quote.change,
+        change_percent: quote.changePercent,
+        week_high_52: quote.weekHigh52,
+        week_low_52: quote.weekLow52,
+        dividend_rate: quote.dividendRate,
+        ex_dividend_date: quote.exDividendDate,
+        dividend_date: quote.dividendDate,
+        payout_ratio: quote.payoutRatio,
+        book_value: quote.bookValue,
+        price_to_book: quote.priceToBook,
+        beta: quote.beta,
+        roe: quote.roe,
+        profit_margin: quote.profitMargin,
+        operating_margin: quote.operatingMargin,
+        debt_to_equity: quote.debtToEquity,
+        current_ratio: quote.currentRatio,
+        revenue_growth: quote.revenueGrowth,
+        earnings_growth: quote.earningsGrowth,
+        
+        last_updated: new Date().toISOString()
+      };
     });
 
-    const updatedData = await Promise.all(updatePromises);
+    const apiData = await Promise.all(updatePromises);
 
     console.log(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: updatedData,
+        data: apiData,
         failedSymbols,
         totalRequested: symbols.length,
         totalSuccessful: stockQuotes.length,
