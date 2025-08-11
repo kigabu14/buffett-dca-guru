@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Calculator, TrendingUp, DollarSign } from "lucide-react";
 import { StockSelector } from "@/components/StockSelector";
 import { StockData, YahooFinanceService } from "@/services/YahooFinanceService";
+import { useToast } from "@/hooks/use-toast";
 
 interface DCASimulatorProps {
   symbol?: string;
@@ -29,6 +30,7 @@ interface DCAResults {
 }
 
 export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulatorProps) => {
+  const { toast } = useToast();
   const [selectedStock, setSelectedStock] = useState<StockData | null>(null);
   const [amount, setAmount] = useState("1000");
   const [frequency, setFrequency] = useState("monthly");
@@ -60,7 +62,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       const totalPeriods = frequency === 'weekly' ? Math.floor(months * 4.33) : 
                           frequency === 'monthly' ? months : months * 30;
 
-      // Get historical data for more accurate simulation
+      // Get historical data for accurate simulation
       let historicalPrices: number[] = [];
       try {
         const historicalData = await YahooFinanceService.getHistoricalData(stockToUse.symbol, '1y');
@@ -69,7 +71,18 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
           historicalPrices = historicalData.map(d => d.price).slice(-totalPeriods);
         }
       } catch (error) {
-        console.warn('Could not fetch historical data, using simulated prices:', error);
+        console.warn('Could not fetch historical data:', error);
+      }
+
+      // Check if we have sufficient historical data
+      if (historicalPrices.length < totalPeriods) {
+        toast({
+          title: "ไม่พบข้อมูลย้อนหลังเพียงพอสำหรับจำลอง DCA",
+          description: `ต้องการข้อมูล ${totalPeriods} จุด แต่มีเพียง ${historicalPrices.length} จุด`,
+          variant: "destructive"
+        });
+        setResults(null);
+        return;
       }
 
       let totalShares = 0;
@@ -77,25 +90,14 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       let totalDividends = 0;
       
       for (let i = 0; i < totalPeriods; i++) {
-        let price: number;
-        
-        if (historicalPrices.length > i) {
-          // Use actual historical price
-          price = historicalPrices[i];
-        } else {
-          // Fallback to simulation with realistic volatility
-          const volatility = 0.015; // 1.5% volatility per period (more realistic)
-          const randomFactor = 1 + (Math.random() - 0.5) * volatility * 2;
-          const trendFactor = 1 + (Math.random() * 0.001); // very small random trend
-          price = stockToUse.price * randomFactor * trendFactor;
-        }
+        const price = historicalPrices[i];
         
         const shares = investmentAmount / price;
         totalShares += shares;
         totalInvested += investmentAmount;
         
-        // Calculate dividends (quarterly payments) - more accurate calculation
-        if (stockToUse.dividendYield && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
+        // Calculate dividends (quarterly payments) - only if dividendYield is not null
+        if (stockToUse.dividendYield !== null && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
           const quarterlyDividendRate = (stockToUse.dividendYield / 100) / 4; // Convert percentage to decimal
           const currentSharesForDividend = totalShares; // Total shares at this point
           totalDividends += currentSharesForDividend * price * quarterlyDividendRate;
@@ -103,7 +105,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       }
 
       const averagePrice = totalInvested / totalShares;
-      const currentValue = totalShares * stockToUse.price;
+      const currentValue = totalShares * (stockToUse.price || 0);
       const totalReturn = currentValue - totalInvested;
       const totalReturnPercent = (totalReturn / totalInvested) * 100;
       const totalReturnWithDividends = totalReturn + totalDividends;
@@ -224,7 +226,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
                 <span>ราคาปัจจุบัน:</span>
                 <span className="font-semibold">{formatCurrency(stockToDisplay.price)}</span>
               </div>
-              {stockToDisplay.dividendYield > 0 && (
+              {stockToDisplay.dividendYield !== null && stockToDisplay.dividendYield > 0 && (
                 <div className="flex items-center justify-between">
                   <span>อัตราปันผล:</span>
                   <span className="font-semibold">{(stockToDisplay.dividendYield * 100).toFixed(2)}%</span>

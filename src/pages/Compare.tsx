@@ -53,7 +53,7 @@ const Compare = () => {
   ];
 
   const formatValue = (value: any, format: string, currency: string = 'USD') => {
-    if (value === null || value === undefined) return '-';
+    if (value == null) return '-';
     
     // Don't treat 0 as invalid for certain metrics
     const allowZero = ['change', 'changePercent'].includes(format);
@@ -61,23 +61,24 @@ const Compare = () => {
     
     switch (format) {
       case 'currency':
-        return YahooFinanceService.formatCurrency(value, currency);
+        return YahooFinanceService.formatDisplayPrice(value, currency);
       case 'change':
-        return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
+        return `${value >= 0 ? '+' : ''}${YahooFinanceService.formatNumber(value)}`;
       case 'percent':
         // Handle percentage values that might already be in decimal form
         const percentValue = value > 1 ? value : value * 100;
-        return `${percentValue >= 0 ? '+' : ''}${percentValue.toFixed(2)}%`;
+        return `${percentValue >= 0 ? '+' : ''}${YahooFinanceService.formatNumber(percentValue)}%`;
       case 'number':
         return YahooFinanceService.formatLargeNumber(value);
       case 'decimal':
-        return value.toFixed(2);
+        return YahooFinanceService.formatNumber(value);
       default:
         return value.toString();
     }
   };
 
-  const getChangeColor = (value: number) => {
+  const getChangeColor = (value: number | null) => {
+    if (value == null) return 'text-muted-foreground';
     if (value > 0) return 'text-green-600';
     if (value < 0) return 'text-red-600';
     return 'text-muted-foreground';
@@ -147,11 +148,8 @@ const Compare = () => {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{stock.symbol}</span>
                     <span className="text-xs text-muted-foreground">
-                      {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
+                      {YahooFinanceService.formatDisplayPrice(stock.price, stock.currency)}
                     </span>
-                    {stock.isSampleData && (
-                      <span className="text-xs text-yellow-600">(ตัวอย่าง)</span>
-                    )}
                   </div>
                   <Button
                     size="sm"
@@ -286,9 +284,9 @@ const Compare = () => {
                       </div>
                       
                       <div className="text-xs text-muted-foreground space-y-1">
-                        {stock.roe && <div>ROE: {(stock.roe * 100).toFixed(2)}%</div>}
-                        {stock.debtToEquity && <div>D/E: {stock.debtToEquity.toFixed(2)}</div>}
-                        {stock.profitMargin && <div>Profit Margin: {(stock.profitMargin * 100).toFixed(2)}%</div>}
+                        {stock.roe !== null && <div>ROE: {(stock.roe * 100).toFixed(2)}%</div>}
+                        {stock.debtToEquity !== null && <div>D/E: {stock.debtToEquity.toFixed(2)}</div>}
+                        {stock.profitMargin !== null && <div>Profit Margin: {(stock.profitMargin * 100).toFixed(2)}%</div>}
                       </div>
                     </div>
                   </Card>
