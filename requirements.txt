@@ -1,0 +1,6 @@
+# Python dependencies for stock data fetching
+# Note: yfinance 2.0.0 doesn't exist, using latest stable version
+yfinance>=0.2.60
+pandas>=2.0.0
+requests>=2.30.0
+python-dotenv>=1.0.0

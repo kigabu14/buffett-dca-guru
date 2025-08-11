@@ -43,7 +43,15 @@ async function fetchFinancialData(symbol: string) {
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
-    return createFallbackData(symbol);
+    console.log(`Attempting fallback to Python yfinance service for ${symbol}`);
+    
+    // Try Python yfinance service as fallback
+    try {
+      return await fetchFromPythonService(symbol);
+    } catch (fallbackError) {
+      console.error(`Python fallback also failed for ${symbol}:`, fallbackError);
+      return createFallbackData(symbol);
+    }
   }
 }
 
@@ -59,10 +67,17 @@ async function fetchChartData(symbol: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Chart API HTTP error! status: ${response.status}`);
+    throw new Error(`Chart API HTTP error! status: ${response.status} - ${response.statusText}`);
   }
   
-  return await response.json();
+  const data = await response.json();
+  
+  // Enhanced validation for yfinance compatibility
+  if (!data || !data.chart || !data.chart.result || data.chart.result.length === 0) {
+    throw new Error(`Invalid chart data structure for ${symbol}`);
+  }
+  
+  return data;
 }
 
 // Fetch quote summary data (financial metrics, P/E, dividend info, etc.)
@@ -87,11 +102,19 @@ async function fetchQuoteSummary(symbol: string) {
     });
 
     if (!response.ok) {
-      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
+      console.warn(`Summary API failed for ${symbol}, status: ${response.status} - ${response.statusText}`);
       return null;
     }
     
-    return await response.json();
+    const data = await response.json();
+    
+    // Enhanced validation for yfinance compatibility
+    if (!data || !data.quoteSummary || !data.quoteSummary.result) {
+      console.warn(`Invalid summary data structure for ${symbol}`);
+      return null;
+    }
+    
+    return data;
   } catch (error) {
     console.warn(`Error fetching summary for ${symbol}:`, error);
     return null;
@@ -246,7 +269,16 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
   }
 }
 
-function createFallbackData(symbol: string) {
+// Fetch data from Python yfinance service as fallback
+async function fetchFromPythonService(symbol: string) {
+  console.log(`Using Python yfinance service for ${symbol}`);
+  
+  // In a production environment, this would be a call to a Python microservice
+  // For now, we return null to indicate the fallback is not available
+  // Implementation would depend on deployment architecture (e.g., Docker, Lambda, etc.)
+  
+  throw new Error('Python yfinance service not available in Edge Function environment');
+}
   const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
   const market = isThaiStock ? 'SET' : 'NASDAQ';
   const currency = isThaiStock ? 'THB' : 'USD';
