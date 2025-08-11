@@ -165,30 +165,94 @@ const Portfolio = () => {
 
       console.log('Data to submit:', dataWithUserId);
 
-      const { data, error } = editingInvestment 
-        ? await supabase
+      if (editingInvestment) {
+        // Handle editing existing investment
+        const { data, error } = await supabase
+          .from('stock_investments')
+          .update(dataWithUserId)
+          .eq('id', editingInvestment.id)
+          .select();
+
+        if (error) {
+          console.error('Supabase error:', error);
+          throw error;
+        }
+      } else {
+        // Check if user already has this stock
+        const { data: existingStock, error: checkError } = await supabase
+          .from('stock_investments')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('symbol', dataWithUserId.symbol)
+          .eq('market', dataWithUserId.market)
+          .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+          // PGRST116 is "not found" error, which is expected if stock doesn't exist
+          throw checkError;
+        }
+
+        if (existingStock) {
+          // Stock exists, calculate new averages
+          const existingTotalCost = (existingStock.quantity * existingStock.buy_price) + existingStock.commission;
+          const newTotalCost = (dataWithUserId.quantity * dataWithUserId.buy_price) + dataWithUserId.commission;
+          const combinedTotalCost = existingTotalCost + newTotalCost;
+          
+          const combinedQuantity = existingStock.quantity + dataWithUserId.quantity;
+          const combinedCommission = existingStock.commission + dataWithUserId.commission;
+          
+          // Calculate average buy price (excluding commission for per-share price)
+          const averageBuyPrice = (existingTotalCost + newTotalCost - combinedCommission) / combinedQuantity;
+          
+          // Calculate weighted average dividend yield
+          const existingDividendWeight = existingStock.quantity * (existingStock.dividend_yield_at_purchase || 0);
+          const newDividendWeight = dataWithUserId.quantity * (dataWithUserId.dividend_yield_at_purchase || 0);
+          const averageDividendYield = combinedQuantity > 0 ? 
+            (existingDividendWeight + newDividendWeight) / combinedQuantity : null;
+
+          // Update existing record with averaged values
+          const { data, error } = await supabase
             .from('stock_investments')
-            .update(dataWithUserId)
-            .eq('id', editingInvestment.id)
-            .select()
-        : await supabase
+            .update({
+              quantity: combinedQuantity,
+              buy_price: averageBuyPrice,
+              commission: combinedCommission,
+              dividend_received: existingStock.dividend_received + (dataWithUserId.dividend_received || 0),
+              dividend_yield_at_purchase: averageDividendYield,
+              current_price: dataWithUserId.current_price || existingStock.current_price,
+              company_name: dataWithUserId.company_name || existingStock.company_name,
+              notes: existingStock.notes && dataWithUserId.notes ? 
+                `${existingStock.notes} | ${dataWithUserId.notes}` : 
+                dataWithUserId.notes || existingStock.notes,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingStock.id)
+            .select();
+
+          if (error) throw error;
+
+          toast({
+            title: "รวมการลงทุนสำเร็จ",
+            description: `เพิ่ม ${investmentData.symbol} เข้าพอร์ตและคำนวณราคาเฉลี่ยแล้ว`,
+          });
+        } else {
+          // Stock doesn't exist, create new entry
+          const { data, error } = await supabase
             .from('stock_investments')
             .insert(dataWithUserId)
             .select();
 
-      console.log('Supabase response:', { data, error });
+          if (error) {
+            console.error('Supabase error:', error);
+            throw error;
+          }
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+          toast({
+            title: "สำเร็จ",
+            description: `เพิ่ม ${investmentData.symbol} เข้าพอร์ตแล้ว`,
+          });
+        }
       }
-
-      toast({
-        title: "สำเร็จ",
-        description: editingInvestment 
-          ? `แก้ไข ${investmentData.symbol} สำเร็จ`
-          : `เพิ่ม ${investmentData.symbol} เข้าพอร์ตแล้ว`,
-      });
 
       setAddDialogOpen(false);
       setEditingInvestment(null);
