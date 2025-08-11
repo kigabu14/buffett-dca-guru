@@ -77,7 +77,8 @@ const Compare = () => {
     }
   };
 
-  const getChangeColor = (value: number) => {
+  const getChangeColor = (value: number | null) => {
+    if (value == null) return 'text-muted-foreground';
     if (value > 0) return 'text-green-600';
     if (value < 0) return 'text-red-600';
     return 'text-muted-foreground';
@@ -149,9 +150,6 @@ const Compare = () => {
                     <span className="text-xs text-muted-foreground">
                       {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
                     </span>
-                    {stock.isSampleData && (
-                      <span className="text-xs text-yellow-600">(ตัวอย่าง)</span>
-                    )}
                   </div>
                   <Button
                     size="sm"
@@ -286,9 +284,9 @@ const Compare = () => {
                       </div>
                       
                       <div className="text-xs text-muted-foreground space-y-1">
-                        {stock.roe && <div>ROE: {(stock.roe * 100).toFixed(2)}%</div>}
-                        {stock.debtToEquity && <div>D/E: {stock.debtToEquity.toFixed(2)}</div>}
-                        {stock.profitMargin && <div>Profit Margin: {(stock.profitMargin * 100).toFixed(2)}%</div>}
+                        {stock.roe != null && <div>ROE: {(stock.roe * 100).toFixed(2)}%</div>}
+                        {stock.debtToEquity != null && <div>D/E: {stock.debtToEquity.toFixed(2)}</div>}
+                        {stock.profitMargin != null && <div>Profit Margin: {(stock.profitMargin * 100).toFixed(2)}%</div>}
                       </div>
                     </div>
                   </Card>

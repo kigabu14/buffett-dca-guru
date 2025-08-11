@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Calculator, TrendingUp, DollarSign } from "lucide-react";
 import { StockSelector } from "@/components/StockSelector";
 import { StockData, YahooFinanceService } from "@/services/YahooFinanceService";
+import { useToast } from "@/hooks/use-toast";
 
 interface DCASimulatorProps {
   symbol?: string;
@@ -29,6 +30,7 @@ interface DCAResults {
 }
 
 export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulatorProps) => {
+  const { toast } = useToast();
   const [selectedStock, setSelectedStock] = useState<StockData | null>(null);
   const [amount, setAmount] = useState("1000");
   const [frequency, setFrequency] = useState("monthly");
@@ -62,14 +64,40 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
 
       // Get historical data for more accurate simulation
       let historicalPrices: number[] = [];
+      let hasHistoricalData = false;
+      
       try {
         const historicalData = await YahooFinanceService.getHistoricalData(stockToUse.symbol, '1y');
-        if (historicalData && historicalData.length > 0) {
+        if (historicalData && historicalData.length >= totalPeriods) {
           // Use actual historical prices for the simulation
           historicalPrices = historicalData.map(d => d.price).slice(-totalPeriods);
+          hasHistoricalData = true;
+        } else {
+          throw new Error(`Insufficient historical data: got ${historicalData?.length || 0} points, need ${totalPeriods}`);
         }
       } catch (error) {
-        console.warn('Could not fetch historical data, using simulated prices:', error);
+        console.warn('Could not fetch sufficient historical data:', error);
+        
+        // Abort simulation gracefully - show warning instead of using random prices
+        // ไม่จำลองด้วยราคาสุ่ม - แสดงคำเตือนแทน
+        toast({
+          title: "ไม่สามารถจำลอง DCA ได้",
+          description: "ไม่มีข้อมูลประวัติราคาเพียงพอจาก Yahoo Finance สำหรับการจำลอง",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Only proceed if we have sufficient historical data
+      if (!hasHistoricalData || historicalPrices.length < totalPeriods) {
+        toast({
+          title: "ข้อมูลไม่เพียงพอ",
+          description: `ต้องการข้อมูล ${totalPeriods} จุด แต่มีเพียง ${historicalPrices.length} จุด`,
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
       }
 
       let totalShares = 0;
@@ -77,35 +105,42 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
       let totalDividends = 0;
       
       for (let i = 0; i < totalPeriods; i++) {
-        let price: number;
+        // Use actual historical price - no fallback to random prices
+        const price = historicalPrices[i];
         
-        if (historicalPrices.length > i) {
-          // Use actual historical price
-          price = historicalPrices[i];
-        } else {
-          // Fallback to simulation with realistic volatility
-          const volatility = 0.015; // 1.5% volatility per period (more realistic)
-          const randomFactor = 1 + (Math.random() - 0.5) * volatility * 2;
-          const trendFactor = 1 + (Math.random() * 0.001); // very small random trend
-          price = stockToUse.price * randomFactor * trendFactor;
+        // Guard against division by zero
+        if (price <= 0) {
+          console.warn(`Invalid price at index ${i}: ${price}`);
+          continue;
         }
         
         const shares = investmentAmount / price;
         totalShares += shares;
         totalInvested += investmentAmount;
         
-        // Calculate dividends (quarterly payments) - more accurate calculation
-        if (stockToUse.dividendYield && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
+        // Calculate dividends (quarterly payments) with null-safe checks
+        if (stockToUse.dividendYield != null && stockToUse.dividendYield > 0 && i > 0 && i % Math.floor(periodsPerYear / 4) === 0) {
           const quarterlyDividendRate = (stockToUse.dividendYield / 100) / 4; // Convert percentage to decimal
           const currentSharesForDividend = totalShares; // Total shares at this point
           totalDividends += currentSharesForDividend * price * quarterlyDividendRate;
         }
       }
 
+      // Guard against division by zero in calculations
+      if (totalShares <= 0 || totalInvested <= 0) {
+        toast({
+          title: "ข้อผิดพลาดในการคำนวณ",
+          description: "ไม่สามารถคำนวณผลลัพธ์ DCA ได้",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+
       const averagePrice = totalInvested / totalShares;
-      const currentValue = totalShares * stockToUse.price;
+      const currentValue = stockToUse.price != null ? totalShares * stockToUse.price : 0;
       const totalReturn = currentValue - totalInvested;
-      const totalReturnPercent = (totalReturn / totalInvested) * 100;
+      const totalReturnPercent = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
       const totalReturnWithDividends = totalReturn + totalDividends;
 
       setResults({
@@ -125,7 +160,7 @@ export const DCASimulator = ({ symbol, currentPrice, dividendYield }: DCASimulat
     }
   };
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null) => {
     const currency = selectedStock?.currency || (symbol?.includes('.BK') ? 'THB' : 'USD');
     return YahooFinanceService.formatCurrency(value, currency);
   };
