@@ -1,0 +1,21 @@
+-- Add extended stock metrics columns to stock_markets table
+alter table stock_markets
+  add column if not exists currency text,
+  add column if not exists change numeric,
+  add column if not exists change_percent numeric,
+  add column if not exists week_high_52 numeric,
+  add column if not exists week_low_52 numeric,
+  add column if not exists dividend_rate numeric,
+  add column if not exists ex_dividend_date date,
+  add column if not exists dividend_date date,
+  add column if not exists payout_ratio numeric,
+  add column if not exists book_value numeric,
+  add column if not exists price_to_book numeric,
+  add column if not exists beta numeric,
+  add column if not exists roe numeric,
+  add column if not exists profit_margin numeric,
+  add column if not exists operating_margin numeric,
+  add column if not exists debt_to_equity numeric,
+  add column if not exists current_ratio numeric,
+  add column if not exists revenue_growth numeric,
+  add column if not exists earnings_growth numeric;
