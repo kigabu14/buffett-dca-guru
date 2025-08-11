@@ -13,37 +13,55 @@ const YAHOO_FINANCE_QUOTE = 'https://query1.finance.yahoo.com/v1/finance/screene
 const YAHOO_FINANCE_QUOTESUMMARY = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary';
 const YAHOO_FINANCE_DIVIDENDS = 'https://query1.finance.yahoo.com/v7/finance/download';
 
+// Normalize symbol for different markets
+function normalizeSymbol(symbol: string): string {
+  // Trim and uppercase
+  let normalized = symbol.trim().toUpperCase();
+  
+  // Convert .SET suffix to .BK for Thai market
+  if (normalized.endsWith('.SET')) {
+    normalized = normalized.replace('.SET', '.BK');
+  }
+  
+  // Future enhancement: auto-append .BK for Thai symbols based on market parameter
+  // For now, keep logic simple to avoid false positives unless suffix provided
+  
+  return normalized;
+}
+
 // Fetch comprehensive financial data from multiple Yahoo Finance endpoints
 async function fetchFinancialData(symbol: string) {
   try {
     console.log(`Fetching data for ${symbol} from Yahoo Finance`);
     
-    // Clean symbol for different markets
-    let cleanSymbol = symbol.trim();
+    // Normalize symbol for different markets
+    const cleanSymbol = normalizeSymbol(symbol);
     
-    // For Thai stocks, ensure .BK suffix
+    // Legacy logic for Thai stocks - maintain compatibility
+    let finalSymbol = cleanSymbol;
     if (symbol.includes('.BK') || symbol.includes('.SET')) {
-      if (!cleanSymbol.includes('.BK')) {
-        cleanSymbol = cleanSymbol.replace('.SET', '.BK');
-        if (!cleanSymbol.includes('.BK')) {
-          cleanSymbol = cleanSymbol + '.BK';
+      if (!finalSymbol.includes('.BK')) {
+        finalSymbol = finalSymbol.replace('.SET', '.BK');
+        if (!finalSymbol.includes('.BK')) {
+          finalSymbol = finalSymbol + '.BK';
         }
       }
     }
 
-    console.log(`Using symbol: ${cleanSymbol}`);
+    console.log(`Using symbol: ${finalSymbol}`);
 
     // Fetch from multiple endpoints in parallel
     const [chartData, summaryData] = await Promise.all([
-      fetchChartData(cleanSymbol),
-      fetchQuoteSummary(cleanSymbol)
+      fetchChartData(finalSymbol),
+      fetchQuoteSummary(finalSymbol)
     ]);
 
-    return parseComprehensiveData(chartData, summaryData, symbol, cleanSymbol);
+    return parseComprehensiveData(chartData, summaryData, symbol, finalSymbol);
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
-    return createFallbackData(symbol);
+    // Throw error instead of using createFallbackData to mark symbol as failed
+    throw new Error(`Failed to fetch data for ${symbol}: ${error.message}`);
   }
 }
 
@@ -98,9 +116,9 @@ async function fetchQuoteSummary(symbol: string) {
   }
 }
 
-function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
+function parseComprehensiveData(chartData: unknown, summaryData: unknown, originalSymbol: string, cleanSymbol: string) {
   try {
-    const result = chartData?.chart?.result?.[0];
+    const result = (chartData as any)?.chart?.result?.[0];
     if (!result) {
       throw new Error('No chart data found');
     }
@@ -112,80 +130,121 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       throw new Error('Invalid chart data structure');
     }
 
-    // Extract basic price data
-    const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
-    const previousClose = meta.previousClose || currentPrice;
-    const change = currentPrice - previousClose;
-    const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
+    // Extract basic price data - only use real values, null if missing
+    const currentPrice = meta.regularMarketPrice || null;
+    const previousClose = meta.previousClose || null;
+    
+    // If both current price and previous close are missing, mark as failed
+    if (currentPrice === null && previousClose === null) {
+      throw new Error('No valid current price or previous close data available');
+    }
+    
+    // Only compute change and changePercent when both values are present; otherwise null
+    let change = null;
+    let changePercent = null;
+    if (currentPrice !== null && previousClose !== null) {
+      change = currentPrice - previousClose;
+      changePercent = previousClose > 0 ? (change / previousClose) * 100 : null;
+    }
 
     // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
     const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
     const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
 
-    // Get latest quote data from chart
-    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
-    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
-    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
-    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
+    // Get latest quote data from chart - only real values, null if not available
+    const volume = meta.regularMarketVolume || quotes?.volume?.slice(-1)?.[0] || null;
+    const dayHigh = meta.regularMarketDayHigh || quotes?.high?.slice(-1)?.[0] || null;
+    const dayLow = meta.regularMarketDayLow || quotes?.low?.slice(-1)?.[0] || null;
+    const open = meta.regularMarketOpen || quotes?.open?.slice(-1)?.[0] || null;
 
-    // Extract financial data from summary API
-    let financialData = {};
-    let dividendData = {};
-    let keyStats = {};
+    // Extract financial data from summary API - all null if not provided by Yahoo
+    let financialData = {
+      marketCap: null,
+      pe: null,
+      eps: null,
+      bookValue: null,
+      priceToBook: null,
+      profitMargin: null,
+      operatingMargin: null,
+      returnOnEquity: null,
+      debtToEquity: null,
+      currentRatio: null,
+      revenueGrowth: null,
+      earningsGrowth: null
+    };
     
-    if (summaryData?.quoteSummary?.result?.[0]) {
-      const summaryResult = summaryData.quoteSummary.result[0];
+    let dividendData = {
+      dividendYield: null,
+      dividendRate: null,
+      exDividendDate: null,
+      dividendDate: null,
+      payoutRatio: null
+    };
+    
+    let keyStats = {
+      fiftyTwoWeekHigh: null,
+      fiftyTwoWeekLow: null,
+      beta: null,
+      sharesOutstanding: null
+    };
+    
+    if ((summaryData as any)?.quoteSummary?.result?.[0]) {
+      const summaryResult = (summaryData as any).quoteSummary.result[0];
       
-      // Financial metrics
+      // Financial metrics - only use real values from Yahoo, null if not provided
       const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
       const financialInfo = summaryResult.financialData || {};
       const summaryDetail = summaryResult.summaryDetail || {};
       const price = summaryResult.price || {};
       
       financialData = {
-        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
+        // marketCap: null if not provided by Yahoo Finance
+        marketCap: price.marketCap?.raw || meta.marketCap || null,
+        // pe: null if not provided by Yahoo Finance  
         pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
-            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
-        eps: defaultKeyStats.trailingEps?.raw || 
-             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
-        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
-        priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
+            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || null,
+        // eps: null if not provided by Yahoo Finance
+        eps: defaultKeyStats.trailingEps?.raw || financialInfo.trailingEps?.raw || null,
+        // bookValue: null if not provided by Yahoo Finance
+        bookValue: defaultKeyStats.bookValue?.raw || null,
+        // priceToBook: null if not provided by Yahoo Finance
+        priceToBook: defaultKeyStats.priceToBook?.raw || null,
         
-        // Financial health metrics
-        profitMargin: financialInfo.profitMargins?.raw || 0.15,
-        operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
-        returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
-        debtToEquity: financialInfo.debtToEquity?.raw || 0.5,
-        currentRatio: financialInfo.currentRatio?.raw || 2.0,
+        // Financial health metrics - null if not provided by Yahoo Finance
+        profitMargin: financialInfo.profitMargins?.raw || null,
+        operatingMargin: financialInfo.operatingMargins?.raw || null,
+        returnOnEquity: financialInfo.returnOnEquity?.raw || null,
+        debtToEquity: financialInfo.debtToEquity?.raw || null,
+        currentRatio: financialInfo.currentRatio?.raw || null,
         
-        // Growth metrics
-        revenueGrowth: financialInfo.revenueGrowth?.raw || 0.1,
-        earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
+        // Growth metrics - null if not provided by Yahoo Finance
+        revenueGrowth: financialInfo.revenueGrowth?.raw || null,
+        earningsGrowth: financialInfo.earningsGrowth?.raw || null
       };
       
-      // Dividend information
+      // Dividend information - null if not provided by Yahoo Finance
       dividendData = {
         dividendYield: summaryDetail.dividendYield?.raw || 
-                      summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
+                      summaryDetail.trailingAnnualDividendYield?.raw || null,
         dividendRate: summaryDetail.dividendRate?.raw || 
-                     summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
+                     summaryDetail.trailingAnnualDividendRate?.raw || null,
         exDividendDate: summaryDetail.exDividendDate?.fmt || null,
         dividendDate: summaryDetail.dividendDate?.fmt || null,
         payoutRatio: summaryDetail.payoutRatio?.raw || null
       };
       
-      // Additional key statistics
+      // Additional key statistics - null if not provided by Yahoo Finance
       keyStats = {
         fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
                          defaultKeyStats.fiftyTwoWeekHigh?.raw || 
-                         meta.fiftyTwoWeekHigh || (currentPrice * 1.3),
+                         meta.fiftyTwoWeekHigh || null,
         fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || 
                         defaultKeyStats.fiftyTwoWeekLow?.raw || 
-                        meta.fiftyTwoWeekLow || (currentPrice * 0.7),
-        beta: defaultKeyStats.beta?.raw || 1.0,
+                        meta.fiftyTwoWeekLow || null,
+        beta: defaultKeyStats.beta?.raw || null,
         sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
-                          price.sharesOutstanding?.raw || 1000000000
+                          price.sharesOutstanding?.raw || null
       };
     }
 
@@ -196,44 +255,45 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       name: meta.longName || meta.shortName || cleanSymbol,
       price: currentPrice,
       current_price: currentPrice,
+      previous_close: previousClose, // Use real previousClose from meta, not computed
       change: change,
       changePercent: changePercent,
       market: market,
       currency: currency,
       
-      // Price data
+      // Price data - null means data not provided by Yahoo
       open: open,
       dayHigh: dayHigh,
       dayLow: dayLow,
       volume: volume,
       
-      // Financial metrics
+      // Financial metrics - null means data not provided by Yahoo
       marketCap: financialData.marketCap,
       pe: financialData.pe,
       eps: financialData.eps,
       bookValue: financialData.bookValue,
       priceToBook: financialData.priceToBook,
       
-      // Dividend data
+      // Dividend data - null means data not provided by Yahoo
       dividendYield: dividendData.dividendYield,
       dividendRate: dividendData.dividendRate,
       exDividendDate: dividendData.exDividendDate,
       dividendDate: dividendData.dividendDate,
       payoutRatio: dividendData.payoutRatio,
       
-      // 52-week range
+      // 52-week range - null means data not provided by Yahoo
       weekHigh52: keyStats.fiftyTwoWeekHigh,
       weekLow52: keyStats.fiftyTwoWeekLow,
       beta: keyStats.beta,
       
-      // Financial health ratios
+      // Financial health ratios - null means data not provided by Yahoo
       roe: financialData.returnOnEquity,
       profitMargin: financialData.profitMargin,
       operatingMargin: financialData.operatingMargin,
       debtToEquity: financialData.debtToEquity,
       currentRatio: financialData.currentRatio,
       
-      // Growth metrics
+      // Growth metrics - null means data not provided by Yahoo
       revenueGrowth: financialData.revenueGrowth,
       earningsGrowth: financialData.earningsGrowth,
       
@@ -242,7 +302,8 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
     
   } catch (error) {
     console.error(`Error parsing comprehensive data for ${originalSymbol}:`, error);
-    return createFallbackData(originalSymbol);
+    // Throw error instead of using createFallbackData to mark symbol as failed
+    throw new Error(`Failed to parse data for ${originalSymbol}: ${error.message}`);
   }
 }
 
@@ -352,7 +413,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Update stock_markets table (removed fields that don't exist in the table)
+    // Update stock_markets table with real data only
     const updatePromises = stockQuotes.map(async (quote) => {
       const stockData = {
         symbol: quote.symbol,
@@ -360,7 +421,7 @@ Deno.serve(async (req) => {
         market: quote.market,
         sector: mapSector(quote.symbol),
         current_price: quote.price,
-        previous_close: quote.price - quote.change,
+        previous_close: quote.previous_close, // Use real previous_close from Yahoo meta
         open_price: quote.open,
         day_high: quote.dayHigh,
         day_low: quote.dayLow,
