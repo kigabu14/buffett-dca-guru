@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { YahooFinanceService, StockData } from "@/services/YahooFinanceService";
 import { RealTimeStockPrice } from "@/components/RealTimeStockPrice";
@@ -13,7 +12,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, TrendingDown, RefreshCw, Activity, DollarSign, BarChart3, Target, Plus, X } from "lucide-react";
+import { TrendingUp, TrendingDown, RefreshCw, Activity, DollarSign, BarChart3, Target } from "lucide-react";
 
 const Dashboard = () => {
   const { portfolioStats, recentActivities, loading, refreshData } = useDashboardData();
@@ -25,12 +24,11 @@ const Dashboard = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [userStocks, setUserStocks] = useState<any[]>([]);
 
-  // ผู้ใช้เลือกหุ้นที่แสดงหน้าแรก (บันทึกใน localStorage)
-  const [watchlist, setWatchlist] = useState<string[]>(() => {
-    const saved = localStorage.getItem('dashboard_watchlist');
-    return saved ? JSON.parse(saved) : ['AOT.BK', 'KBANK.BK', 'PTT.BK', 'AAPL', 'MSFT'];
-  });
-  const [newSymbol, setNewSymbol] = useState<string>('');
+  // Popular stocks to display on dashboard
+  const popularStocks = [
+    'BBL.BK', 'CPALL.BK', 'PTT.BK', 'KBANK.BK', 'AOT.BK',
+    'AAPL', 'TSLA', 'GOOGL', 'MSFT', 'NVDA'
+  ];
 
   useEffect(() => {
     fetchStockData();

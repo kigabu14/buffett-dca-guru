@@ -49,13 +49,7 @@ async function fetchFinancialData(symbol: string) {
 
 // Fetch chart data (price, volume, etc.)
 async function fetchChartData(symbol: string) {
-  const params = new URLSearchParams({
-    interval: '1d',
-    range: '1mo',
-    includePrePost: 'false',
-    events: 'div',
-  });
-  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}?${params.toString()}`;
+  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
   
   const response = await fetch(chartUrl, {
     headers: {
@@ -126,8 +120,7 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
 
     // Determine market and currency
     const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const rawExchange = meta.exchangeName || meta.exchange || '';
-    const market = isThaiStock ? 'SET' : normalizeMarket(rawExchange);
+    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
     const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
 
     // Get latest quote data from chart
@@ -135,23 +128,6 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
     const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
     const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
     const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
-
-    // Dividend events from chart API (fallback when quoteSummary is unavailable)
-    let fallbackExDividendDate: string | null = null;
-    let fallbackDividendRate: number | null = null;
-    const dividendsObj = result?.events?.dividends;
-    if (dividendsObj && typeof dividendsObj === 'object') {
-      const keys = Object.keys(dividendsObj).sort();
-      if (keys.length > 0) {
-        const lastKey = keys[keys.length - 1];
-        const last = dividendsObj[lastKey];
-        const epoch = Number(last?.date || last?.timestamp || lastKey);
-        if (!Number.isNaN(epoch)) {
-          fallbackExDividendDate = new Date(epoch * 1000).toISOString().slice(0, 10);
-        }
-        fallbackDividendRate = Number(last?.amount || last?.dividend || 0) || null;
-      }
-    }
 
     // Extract financial data from summary API
     let financialData = {};
@@ -271,59 +247,6 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
 }
 
 
-
-function normalizeMarket(exchange: string): string {
-  const ex = (exchange || '').toUpperCase();
-  if (['NMS', 'NGM', 'NCM'].includes(ex)) return 'NASDAQ';
-  if (['NYQ', 'NYS', 'NYE'].includes(ex)) return 'NYSE';
-  if (['PCX', 'ASE', 'AMEX'].includes(ex)) return 'AMEX';
-  if (['BKK', 'SET'].includes(ex)) return 'SET';
-  return 'NASDAQ';
-}
-
-function toIsoDate(dateStr: string | null): string | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
-}
-
-function createFallbackData(symbol: string) {
-  const isThai = symbol.includes('.BK') || symbol.includes('.SET');
-  return {
-    symbol,
-    name: symbol,
-    price: 0,
-    current_price: 0,
-    change: 0,
-    changePercent: 0,
-    market: isThai ? 'SET' : 'NASDAQ',
-    currency: isThai ? 'THB' : 'USD',
-    open: 0,
-    dayHigh: 0,
-    dayLow: 0,
-    volume: 0,
-    marketCap: 0,
-    pe: 0,
-    eps: 0,
-    dividendYield: 0,
-    dividendRate: 0,
-    exDividendDate: null,
-    dividendDate: null,
-    payoutRatio: null,
-    weekHigh52: 0,
-    weekLow52: 0,
-    beta: 1,
-    roe: 0,
-    profitMargin: 0,
-    operatingMargin: 0,
-    debtToEquity: 0,
-    currentRatio: 0,
-    revenueGrowth: 0,
-    earningsGrowth: 0,
-    success: false,
-  };
-}
 
 function determineMarket(symbol: string): string {
   if (symbol.includes('.BK') || symbol.includes('.SET')) {
@@ -460,46 +383,7 @@ Deno.serve(async (req) => {
         console.error(`Error updating ${quote.symbol}:`, error);
       }
 
-      // Save dividend information when available
-      try {
-        const exDateIso = toIsoDate(quote.exDividendDate || null);
-        const payDateIso = toIsoDate(quote.dividendDate || null);
-        const hasDividend = (quote.dividendRate && quote.dividendRate > 0) || (quote.dividendYield && quote.dividendYield > 0);
-
-        if (exDateIso && hasDividend) {
-          // Insert into dividend_history
-          await supabase.from('dividend_history').insert({
-            symbol: quote.symbol,
-            ex_dividend_date: exDateIso,
-            payment_date: payDateIso,
-            dividend_amount: quote.dividendRate || 0,
-            currency: quote.currency || (quote.symbol.includes('.BK') ? 'THB' : 'USD'),
-          });
-
-          // Insert into xd_calendar
-          await supabase.from('xd_calendar').insert({
-            symbol: quote.symbol,
-            ex_dividend_date: exDateIso,
-            payment_date: payDateIso,
-            dividend_amount: quote.dividendRate || 0,
-            dividend_yield: quote.dividendYield || null,
-          });
-        }
-      } catch (divErr) {
-        console.error(`Error saving dividend info for ${quote.symbol}:`, divErr);
-      }
-
-      return {
-        ...stockData,
-        currency: quote.currency,
-        forward_dividend_yield: quote.dividendYield,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: toIsoDate(quote.exDividendDate || null),
-        dividend_date: toIsoDate(quote.dividendDate || null),
-        week_high_52: quote.weekHigh52,
-        week_low_52: quote.weekLow52,
-        name: quote.name,
-      };
+      return stockData;
     });
 
     const updatedData = await Promise.all(updatePromises);
