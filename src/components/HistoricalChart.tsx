@@ -24,10 +24,12 @@ export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, classN
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState('1mo');
   const [interval, setInterval] = useState('1d');
+  const [hasError, setHasError] = useState(false); // Track error state for empty state display
 
   const fetchHistoricalData = async () => {
     try {
       setLoading(true);
+      setHasError(false);
       const historicalData = await YahooFinanceService.getHistoricalData(symbol, period, interval);
       
       const chartData = historicalData.map(point => ({
@@ -40,44 +42,23 @@ export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, classN
     } catch (error) {
       console.error('Error fetching historical data:', error);
       
-      // Generate sample data for demonstration
-      const sampleData = generateSampleData();
-      setData(sampleData);
+      // Remove synthetic data generation - show empty state instead
+      // เอาการสร้างข้อมูลปลอมออก - แสดงสถานะว่างแทน
+      setData([]);
+      setHasError(true);
       
       toast({
-        title: "ใช้ข้อมูลตัวอย่าง",
-        description: "ไม่สามารถดึงข้อมูลจริงได้ กำลังแสดงข้อมูลตัวอย่าง",
-        variant: "default"
+        title: "ไม่สามารถโหลดข้อมูลได้",
+        description: "ไม่สามารถดึงข้อมูลประวัติศาสตร์ราคาได้ กรุณาลองใหม่อีกครั้ง",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const generateSampleData = (): ChartDataPoint[] => {
-    const basePrice = 100;
-    const points = period === '1d' ? 24 : period === '5d' ? 120 : period === '1mo' ? 30 : 252;
-    
-    return Array.from({ length: points }, (_, i) => {
-      const volatility = 0.02;
-      const trend = 0.001;
-      const randomChange = (Math.random() - 0.5) * volatility;
-      const price = basePrice * (1 + trend * i + randomChange);
-      
-      const date = new Date();
-      if (period === '1d') {
-        date.setHours(date.getHours() - (points - i));
-      } else {
-        date.setDate(date.getDate() - (points - i));
-      }
-      
-      return {
-        date: date.toLocaleDateString('th-TH'),
-        price: Math.max(price, 1),
-        volume: Math.floor(Math.random() * 1000000) + 100000
-      };
-    });
-  };
+  // Remove generateSampleData function completely as per requirements
+  // เอาฟังก์ชัน generateSampleData ออกไปตามข้อกำหนด
 
   useEffect(() => {
     if (symbol) {
@@ -162,6 +143,25 @@ export const HistoricalChart: React.FC<HistoricalChartProps> = ({ symbol, classN
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
               <p className="text-muted-foreground">กำลังโหลดข้อมูล...</p>
+            </div>
+          </div>
+        ) : data.length === 0 ? (
+          // Empty state when no data available - สถานะว่างเมื่อไม่มีข้อมูล
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-medium mb-2">ไม่มีข้อมูล</h3>
+              <p className="text-muted-foreground mb-4">
+                ไม่สามารถดึงข้อมูลประวัติศาสตร์ราคาสำหรับ {symbol} ได้
+              </p>
+              <Button
+                variant="outline"
+                onClick={fetchHistoricalData}
+                className="gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                ลองอีกครั้ง
+              </Button>
             </div>
           </div>
         ) : (
