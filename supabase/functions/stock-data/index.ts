@@ -7,16 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Yahoo Finance API endpoints
-const YAHOO_FINANCE_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart';
-const YAHOO_FINANCE_QUOTE = 'https://query2.finance.yahoo.com/v1/finance/screener';
-const YAHOO_FINANCE_QUOTESUMMARY = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary';
-const YAHOO_FINANCE_DIVIDENDS = 'https://query2.finance.yahoo.com/v7/finance/download';
+// Python backend endpoint for yfinance 2.0.0
+const PYTHON_BACKEND_URL = Deno.env.get('PYTHON_BACKEND_URL') || 'http://localhost:8000';
 
-// Fetch comprehensive financial data from multiple Yahoo Finance endpoints
+// Fetch comprehensive financial data using Python backend with yfinance 2.0.0
 async function fetchFinancialData(symbol: string) {
   try {
-    console.log(`Fetching data for ${symbol} from Yahoo Finance`);
+    console.log(`Fetching data for ${symbol} from Python backend with yfinance 2.0.0`);
     
     // Clean symbol for different markets
     let cleanSymbol = symbol.trim();
@@ -33,13 +30,27 @@ async function fetchFinancialData(symbol: string) {
 
     console.log(`Using symbol: ${cleanSymbol}`);
 
-    // Fetch from multiple endpoints in parallel
-    const [chartData, summaryData] = await Promise.all([
-      fetchChartData(cleanSymbol),
-      fetchQuoteSummary(cleanSymbol)
-    ]);
+    // Call Python backend API
+    const response = await fetch(`${PYTHON_BACKEND_URL}/stock/${cleanSymbol}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Supabase-Edge-Function'
+      }
+    });
 
-    return parseComprehensiveData(chartData, summaryData, symbol, cleanSymbol);
+    if (!response.ok) {
+      throw new Error(`Python backend API HTTP error! status: ${response.status}`);
+    }
+
+    const stockData = await response.json();
+    
+    if (!stockData.success) {
+      throw new Error(stockData.error || 'Failed to fetch data from Python backend');
+    }
+
+    console.log(`Successfully fetched data for ${cleanSymbol} from Python backend: price=${stockData.current_price}, PE=${stockData.pe_ratio}`);
+    return stockData;
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
@@ -47,201 +58,119 @@ async function fetchFinancialData(symbol: string) {
   }
 }
 
-// Fetch chart data (price, volume, etc.)
-async function fetchChartData(symbol: string) {
-  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
-  
-  const response = await fetch(chartUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': 'application/json'
-    }
-  });
+// Fetch multiple stocks from Python backend
+async function fetchMultipleStocks(symbols: string[]) {
+  try {
+    console.log(`Fetching data for ${symbols.length} symbols from Python backend`);
+    
+    const response = await fetch(`${PYTHON_BACKEND_URL}/stock-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Supabase-Edge-Function'
+      },
+      body: JSON.stringify({ symbols })
+    });
 
-  if (!response.ok) {
-    throw new Error(`Chart API HTTP error! status: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Python backend API HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error('Failed to fetch data from Python backend');
+    }
+
+    console.log(`Successfully fetched data for ${result.total_successful}/${result.total_requested} symbols from Python backend`);
+    return result;
+    
+  } catch (error) {
+    console.error(`Error fetching multiple stocks:`, error);
+    throw error;
   }
-  
-  return await response.json();
 }
 
-// Fetch quote summary data (financial metrics, P/E, dividend info, etc.)
-async function fetchQuoteSummary(symbol: string) {
-  const modules = [
-    'defaultKeyStatistics',
-    'financialData', 
-    'summaryDetail',
-    'quoteType',
-    'price',
-    'summaryProfile'
-  ].join(',');
-  
-  const summaryUrl = `${YAHOO_FINANCE_QUOTESUMMARY}/${symbol}?modules=${modules}`;
-  
+// Fetch historical data from Python backend
+async function fetchHistoricalData(symbol: string, period: string = '1mo', interval: string = '1d') {
   try {
-    const response = await fetch(summaryUrl, {
+    console.log(`Fetching historical data for ${symbol} from Python backend`);
+    
+    const response = await fetch(`${PYTHON_BACKEND_URL}/historical/${symbol}?period=${period}&interval=${interval}`, {
+      method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Supabase-Edge-Function'
       }
     });
 
     if (!response.ok) {
-      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
-      return null;
+      throw new Error(`Python backend API HTTP error! status: ${response.status}`);
     }
+
+    const result = await response.json();
     
-    return await response.json();
+    if (!result.success) {
+      throw new Error('Failed to fetch historical data from Python backend');
+    }
+
+    console.log(`Successfully fetched ${result.total_points} historical data points for ${symbol}`);
+    return result;
+    
   } catch (error) {
-    console.warn(`Error fetching summary for ${symbol}:`, error);
-    return null;
+    console.error(`Error fetching historical data for ${symbol}:`, error);
+    throw error;
   }
 }
 
-function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
+// Convert Python backend response to expected format
+function convertBackendResponse(backendData: any, originalSymbol: string) {
   try {
-    const result = chartData?.chart?.result?.[0];
-    if (!result) {
-      throw new Error('No chart data found');
-    }
-
-    const meta = result.meta;
-    const quotes = result.indicators?.quote?.[0];
-    
-    if (!meta) {
-      throw new Error('Invalid chart data structure');
-    }
-
-    // Extract basic price data
-    const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
-    const previousClose = meta.previousClose || currentPrice;
-    const change = currentPrice - previousClose;
-    const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
-
-    // Determine market and currency
-    const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
-    const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
-
-    // Get latest quote data from chart
-    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
-    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
-    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
-    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
-
-    // Extract financial data from summary API
-    let financialData = {};
-    let dividendData = {};
-    let keyStats = {};
-    
-    if (summaryData?.quoteSummary?.result?.[0]) {
-      const summaryResult = summaryData.quoteSummary.result[0];
-      
-      // Financial metrics
-      const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
-      const financialInfo = summaryResult.financialData || {};
-      const summaryDetail = summaryResult.summaryDetail || {};
-      const price = summaryResult.price || {};
-      
-      financialData = {
-        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
-        pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
-            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
-        eps: defaultKeyStats.trailingEps?.raw || 
-             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
-        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
-        priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
-        
-        // Financial health metrics
-        profitMargin: financialInfo.profitMargins?.raw || 0.15,
-        operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
-        returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
-        debtToEquity: financialInfo.debtToEquity?.raw || 0.5,
-        currentRatio: financialInfo.currentRatio?.raw || 2.0,
-        
-        // Growth metrics
-        revenueGrowth: financialInfo.revenueGrowth?.raw || 0.1,
-        earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
-      };
-      
-      // Dividend information
-      dividendData = {
-        dividendYield: summaryDetail.dividendYield?.raw || 
-                      summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
-        dividendRate: summaryDetail.dividendRate?.raw || 
-                     summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
-        exDividendDate: summaryDetail.exDividendDate?.fmt || null,
-        dividendDate: summaryDetail.dividendDate?.fmt || null,
-        payoutRatio: summaryDetail.payoutRatio?.raw || null
-      };
-      
-      // Additional key statistics
-      keyStats = {
-        fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
-                         defaultKeyStats.fiftyTwoWeekHigh?.raw || 
-                         meta.fiftyTwoWeekHigh || (currentPrice * 1.3),
-        fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || 
-                        defaultKeyStats.fiftyTwoWeekLow?.raw || 
-                        meta.fiftyTwoWeekLow || (currentPrice * 0.7),
-        beta: defaultKeyStats.beta?.raw || 1.0,
-        sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
-                          price.sharesOutstanding?.raw || 1000000000
-      };
-    }
-
-    console.log(`Successfully parsed comprehensive data for ${originalSymbol}: price=${currentPrice}, PE=${financialData.pe}, dividend=${dividendData.dividendYield}`);
-
+    // Data is already in the correct format from Python backend
     return {
-      symbol: originalSymbol,
-      name: meta.longName || meta.shortName || cleanSymbol,
-      price: currentPrice,
-      current_price: currentPrice,
-      change: change,
-      changePercent: changePercent,
-      market: market,
-      currency: currency,
+      symbol: backendData.symbol || originalSymbol,
+      company_name: backendData.company_name || backendData.name || originalSymbol,
+      name: backendData.company_name || backendData.name || originalSymbol,
+      market: backendData.market,
+      sector: mapSector(backendData.symbol || originalSymbol),
+      current_price: backendData.current_price,
+      previous_close: backendData.previous_close,
+      open_price: backendData.open_price,
+      day_high: backendData.day_high,
+      day_low: backendData.day_low,
+      volume: backendData.volume,
+      market_cap: backendData.market_cap,
+      pe_ratio: backendData.pe_ratio,
+      eps: backendData.eps,
+      dividend_yield: backendData.dividend_yield,
       
-      // Price data
-      open: open,
-      dayHigh: dayHigh,
-      dayLow: dayLow,
-      volume: volume,
+      // Extended metrics from yfinance 2.0.0
+      currency: backendData.currency,
+      change: backendData.change,
+      change_percent: backendData.change_percent,
+      week_high_52: backendData.week_high_52,
+      week_low_52: backendData.week_low_52,
+      dividend_rate: backendData.dividend_rate,
+      ex_dividend_date: backendData.ex_dividend_date,
+      dividend_date: backendData.dividend_date,
+      payout_ratio: backendData.payout_ratio,
+      book_value: backendData.book_value,
+      price_to_book: backendData.price_to_book,
+      beta: backendData.beta,
+      roe: backendData.roe,
+      profit_margin: backendData.profit_margin,
+      operating_margin: backendData.operating_margin,
+      debt_to_equity: backendData.debt_to_equity,
+      current_ratio: backendData.current_ratio,
+      revenue_growth: backendData.revenue_growth,
+      earnings_growth: backendData.earnings_growth,
       
-      // Financial metrics
-      marketCap: financialData.marketCap,
-      pe: financialData.pe,
-      eps: financialData.eps,
-      bookValue: financialData.bookValue,
-      priceToBook: financialData.priceToBook,
-      
-      // Dividend data
-      dividendYield: dividendData.dividendYield,
-      dividendRate: dividendData.dividendRate,
-      exDividendDate: dividendData.exDividendDate,
-      dividendDate: dividendData.dividendDate,
-      payoutRatio: dividendData.payoutRatio,
-      
-      // 52-week range
-      weekHigh52: keyStats.fiftyTwoWeekHigh,
-      weekLow52: keyStats.fiftyTwoWeekLow,
-      beta: keyStats.beta,
-      
-      // Financial health ratios
-      roe: financialData.returnOnEquity,
-      profitMargin: financialData.profitMargin,
-      operatingMargin: financialData.operatingMargin,
-      debtToEquity: financialData.debtToEquity,
-      currentRatio: financialData.currentRatio,
-      
-      // Growth metrics
-      revenueGrowth: financialData.revenueGrowth,
-      earningsGrowth: financialData.earningsGrowth,
-      
-      success: true
+      last_updated: backendData.last_updated || new Date().toISOString(),
+      success: backendData.success
     };
     
   } catch (error) {
-    console.error(`Error parsing comprehensive data for ${originalSymbol}:`, error);
+    console.error(`Error converting backend response for ${originalSymbol}:`, error);
     return createFallbackData(originalSymbol);
   }
 }
@@ -254,50 +183,43 @@ function createFallbackData(symbol: string) {
   
   return {
     symbol: symbol,
+    company_name: symbol,
     name: symbol,
-    price: fallbackPrice,
-    current_price: fallbackPrice,
-    change: 0,
-    changePercent: 0,
     market: market,
-    currency: currency,
-    
-    // Price data
-    open: fallbackPrice,
-    dayHigh: fallbackPrice * 1.02,
-    dayLow: fallbackPrice * 0.98,
+    sector: mapSector(symbol),
+    current_price: fallbackPrice,
+    previous_close: fallbackPrice,
+    open_price: fallbackPrice,
+    day_high: fallbackPrice * 1.02,
+    day_low: fallbackPrice * 0.98,
     volume: 0,
-    
-    // Financial metrics with defaults
-    marketCap: fallbackPrice * 1000000000,
-    pe: 15.0,
+    market_cap: fallbackPrice * 1000000000,
+    pe_ratio: 15.0,
     eps: fallbackPrice / 15.0,
-    bookValue: fallbackPrice * 0.8,
-    priceToBook: 1.25,
+    dividend_yield: 0.03,
     
-    // Dividend data
-    dividendYield: 0.03,
-    dividendRate: fallbackPrice * 0.03,
-    exDividendDate: null,
-    dividendDate: null,
-    payoutRatio: null,
-    
-    // 52-week range
-    weekHigh52: fallbackPrice * 1.3,
-    weekLow52: fallbackPrice * 0.7,
+    // Extended metrics with defaults (yfinance 2.0.0 compatibility)
+    currency: currency,
+    change: 0,
+    change_percent: 0,
+    week_high_52: fallbackPrice * 1.3,
+    week_low_52: fallbackPrice * 0.7,
+    dividend_rate: fallbackPrice * 0.03,
+    ex_dividend_date: null,
+    dividend_date: null,
+    payout_ratio: null,
+    book_value: fallbackPrice * 0.8,
+    price_to_book: 1.25,
     beta: 1.0,
-    
-    // Financial health ratios
     roe: 0.15,
-    profitMargin: 0.15,
-    operatingMargin: 0.20,
-    debtToEquity: 0.5,
-    currentRatio: 2.0,
+    profit_margin: 0.15,
+    operating_margin: 0.20,
+    debt_to_equity: 0.5,
+    current_ratio: 2.0,
+    revenue_growth: 0.1,
+    earnings_growth: 0.1,
     
-    // Growth metrics
-    revenueGrowth: 0.1,
-    earningsGrowth: 0.1,
-    
+    last_updated: new Date().toISOString(),
     success: false
   };
 }
@@ -338,6 +260,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const symbols = Array.isArray(body.symbols) ? body.symbols : [body.symbol];
+    const historical = body.historical || false;
+    const period = body.period || '1mo';
+    const interval = body.interval || '1d';
     
     if (!symbols || symbols.length === 0) {
       return new Response(
@@ -349,176 +274,200 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing request for ${symbols.length} symbols:`, symbols.slice(0, 5));
+    console.log(`Processing request for ${symbols.length} symbols using yfinance 2.0.0 backend`);
 
-    const stockQuotes = [];
-    const failedSymbols = [];
-    
-    // Process symbols with controlled concurrency
-    const maxConcurrent = 3;
-    for (let i = 0; i < symbols.length; i += maxConcurrent) {
-      const batch = symbols.slice(i, i + maxConcurrent);
-      
-      const batchPromises = batch.map(async (symbol: string) => {
-        const cleanSymbol = symbol.trim();
-        try {
-          const realData = await fetchFinancialData(cleanSymbol);
-          return { success: true, data: realData };
-        } catch (error) {
-          console.error(`Failed to fetch data for ${cleanSymbol}:`, error.message);
-          return { success: false, symbol: cleanSymbol, error: error.message };
-        }
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      
-      batchResults.forEach(result => {
-        if (result.success) {
-          stockQuotes.push(result.data);
-        } else {
-          failedSymbols.push(result.symbol);
-        }
-      });
-
-      // Small delay between batches to avoid overwhelming Yahoo Finance
-      if (i + maxConcurrent < symbols.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    if (historical) {
+      // Handle historical data request
+      if (symbols.length > 1) {
+        return new Response(
+          JSON.stringify({ error: 'Historical data only supports single symbol' }),
+          { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
       }
-    }
-    
-    if (stockQuotes.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'No data could be retrieved',
-          message: `ไม่สามารถดึงข้อมูลได้สำหรับ: ${failedSymbols.join(', ')}`,
-          failedSymbols,
-          success: false,
-          data: []
-        }),
-        { 
-          status: 503,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+
+      try {
+        const historicalResult = await fetchHistoricalData(symbols[0], period, interval);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            historical: historicalResult.historical,
+            symbol: symbols[0],
+            period: period,
+            interval: interval,
+            timestamp: new Date().toISOString()
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Historical data fetch error:', error);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to fetch historical data',
+            message: `ไม่สามารถดึงข้อมูลประวัติศาสตร์ได้: ${error.message}`,
+            success: false
+          }),
+          { 
+            status: 503,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    } else {
+      // Handle regular stock data request using Python backend
+      try {
+        let stockQuotes = [];
+        let failedSymbols = [];
+
+        if (symbols.length === 1) {
+          // Single stock request
+          try {
+            const stockData = await fetchFinancialData(symbols[0]);
+            const convertedData = convertBackendResponse(stockData, symbols[0]);
+            stockQuotes.push(convertedData);
+          } catch (error) {
+            console.error(`Failed to fetch data for ${symbols[0]}:`, error.message);
+            failedSymbols.push(symbols[0]);
+            stockQuotes.push(createFallbackData(symbols[0]));
+          }
+        } else {
+          // Multiple stocks request
+          try {
+            const multipleResult = await fetchMultipleStocks(symbols);
+            stockQuotes = multipleResult.data.map((item: any) => convertBackendResponse(item, item.symbol));
+            failedSymbols = multipleResult.failed_symbols || [];
+          } catch (error) {
+            console.error('Multiple stocks fetch error:', error);
+            // Fallback to individual requests
+            for (const symbol of symbols) {
+              try {
+                const stockData = await fetchFinancialData(symbol);
+                const convertedData = convertBackendResponse(stockData, symbol);
+                stockQuotes.push(convertedData);
+              } catch (err) {
+                console.error(`Failed to fetch data for ${symbol}:`, err.message);
+                failedSymbols.push(symbol);
+                stockQuotes.push(createFallbackData(symbol));
+              }
+            }
+          }
         }
-      );
-    }
-
-    // Connect to Supabase and update database
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Update stock_markets table with extended metrics
-    const updatePromises = stockQuotes.map(async (quote) => {
-      // Build dbData for database upsert with all extended fields
-      const dbData = {
-        symbol: quote.symbol,
-        company_name: quote.name,
-        market: quote.market,
-        sector: mapSector(quote.symbol),
-        current_price: quote.price,
-        previous_close: quote.price - quote.change,
-        open_price: quote.open,
-        day_high: quote.dayHigh,
-        day_low: quote.dayLow,
-        volume: quote.volume,
-        market_cap: quote.marketCap,
-        pe_ratio: quote.pe,
-        eps: quote.eps,
-        dividend_yield: quote.dividendYield,
         
-        // Extended metrics
-        currency: quote.currency,
-        change: quote.change,
-        change_percent: quote.changePercent,
-        week_high_52: quote.weekHigh52,
-        week_low_52: quote.weekLow52,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: quote.exDividendDate,
-        dividend_date: quote.dividendDate,
-        payout_ratio: quote.payoutRatio,
-        book_value: quote.bookValue,
-        price_to_book: quote.priceToBook,
-        beta: quote.beta,
-        roe: quote.roe,
-        profit_margin: quote.profitMargin,
-        operating_margin: quote.operatingMargin,
-        debt_to_equity: quote.debtToEquity,
-        current_ratio: quote.currentRatio,
-        revenue_growth: quote.revenueGrowth,
-        earnings_growth: quote.earningsGrowth,
-        
-        last_updated: new Date().toISOString()
-      };
+        if (stockQuotes.length === 0) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'No data could be retrieved',
+              message: `ไม่สามารถดึงข้อมูลได้สำหรับ: ${failedSymbols.join(', ')}`,
+              failedSymbols,
+              success: false,
+              data: []
+            }),
+            { 
+              status: 503,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
 
-      const { error } = await supabase
-        .from('stock_markets')
-        .upsert(dbData, { 
-          onConflict: 'symbol',
-          ignoreDuplicates: false 
+        // Connect to Supabase and update database
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Update stock_markets table with data from yfinance 2.0.0
+        const updatePromises = stockQuotes.map(async (quote) => {
+          const dbData = {
+            symbol: quote.symbol,
+            company_name: quote.company_name || quote.name,
+            market: quote.market,
+            sector: quote.sector || mapSector(quote.symbol),
+            current_price: quote.current_price,
+            previous_close: quote.previous_close,
+            open_price: quote.open_price,
+            day_high: quote.day_high,
+            day_low: quote.day_low,
+            volume: quote.volume,
+            market_cap: quote.market_cap,
+            pe_ratio: quote.pe_ratio,
+            eps: quote.eps,
+            dividend_yield: quote.dividend_yield,
+            
+            // Extended metrics from yfinance 2.0.0
+            currency: quote.currency,
+            change: quote.change,
+            change_percent: quote.change_percent,
+            week_high_52: quote.week_high_52,
+            week_low_52: quote.week_low_52,
+            dividend_rate: quote.dividend_rate,
+            ex_dividend_date: quote.ex_dividend_date,
+            dividend_date: quote.dividend_date,
+            payout_ratio: quote.payout_ratio,
+            book_value: quote.book_value,
+            price_to_book: quote.price_to_book,
+            beta: quote.beta,
+            roe: quote.roe,
+            profit_margin: quote.profit_margin,
+            operating_margin: quote.operating_margin,
+            debt_to_equity: quote.debt_to_equity,
+            current_ratio: quote.current_ratio,
+            revenue_growth: quote.revenue_growth,
+            earnings_growth: quote.earnings_growth,
+            
+            last_updated: new Date().toISOString()
+          };
+
+          const { error } = await supabase
+            .from('stock_markets')
+            .upsert(dbData, { 
+              onConflict: 'symbol',
+              ignoreDuplicates: false 
+            });
+
+          if (error) {
+            console.error(`Error updating ${quote.symbol}:`, error);
+          }
+
+          // Return API data in expected format
+          return quote;
         });
 
-      if (error) {
-        console.error(`Error updating ${quote.symbol}:`, error);
+        const apiData = await Promise.all(updatePromises);
+
+        console.log(`Successfully processed ${stockQuotes.length} stocks using yfinance 2.0.0, failed: ${failedSymbols.length}`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: apiData,
+            failedSymbols,
+            totalRequested: symbols.length,
+            totalSuccessful: stockQuotes.length,
+            totalFailed: failedSymbols.length,
+            timestamp: new Date().toISOString(),
+            backend: 'yfinance-2.0.0'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Stock data processing error:', error);
+        
+        return new Response(
+          JSON.stringify({ 
+            error: 'Internal server error',
+            message: 'เกิดข้อผิดพลาดในการดึงข้อมูล',
+            details: error.message,
+            success: false
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
       }
-
-      // Build apiData for response (snake_case)
-      return {
-        symbol: quote.symbol,
-        company_name: quote.name,
-        market: quote.market,
-        sector: mapSector(quote.symbol),
-        current_price: quote.price,
-        previous_close: quote.price - quote.change,
-        open_price: quote.open,
-        day_high: quote.dayHigh,
-        day_low: quote.dayLow,
-        volume: quote.volume,
-        market_cap: quote.marketCap,
-        pe_ratio: quote.pe,
-        eps: quote.eps,
-        dividend_yield: quote.dividendYield,
-        
-        // Extended metrics in snake_case for frontend consumption
-        currency: quote.currency,
-        change: quote.change,
-        change_percent: quote.changePercent,
-        week_high_52: quote.weekHigh52,
-        week_low_52: quote.weekLow52,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: quote.exDividendDate,
-        dividend_date: quote.dividendDate,
-        payout_ratio: quote.payoutRatio,
-        book_value: quote.bookValue,
-        price_to_book: quote.priceToBook,
-        beta: quote.beta,
-        roe: quote.roe,
-        profit_margin: quote.profitMargin,
-        operating_margin: quote.operatingMargin,
-        debt_to_equity: quote.debtToEquity,
-        current_ratio: quote.currentRatio,
-        revenue_growth: quote.revenueGrowth,
-        earnings_growth: quote.earningsGrowth,
-        
-        last_updated: new Date().toISOString()
-      };
-    });
-
-    const apiData = await Promise.all(updatePromises);
-
-    console.log(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: apiData,
-        failedSymbols,
-        totalRequested: symbols.length,
-        totalSuccessful: stockQuotes.length,
-        totalFailed: failedSymbols.length,
-        timestamp: new Date().toISOString()
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    }
 
   } catch (error) {
     console.error('Stock data fetch error:', error);

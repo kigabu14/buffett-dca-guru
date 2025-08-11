@@ -4,23 +4,32 @@
 
 **URL**: https://lovable.dev/projects/62ec8690-1ea0-459c-a447-9210c3b8d1f7
 
-## How can I edit this code?
+## Architecture
 
-There are several ways of editing your application.
+This project uses a modern hybrid architecture for reliable stock data fetching:
 
-**Use Lovable**
+- **Frontend**: React/TypeScript with Vite, shadcn-ui, and Tailwind CSS
+- **Edge Functions**: Supabase Edge Functions (Deno/TypeScript)
+- **Python Backend**: FastAPI service with yfinance 2.0.0 integration
+- **Database**: Supabase PostgreSQL
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/62ec8690-1ea0-459c-a447-9210c3b8d1f7) and start prompting.
+## Stock Data Integration
 
-Changes made via Lovable will be committed automatically to this repo.
+The application now uses **yfinance 2.0.0** via a Python FastAPI backend for enhanced stock data accuracy and comprehensive financial metrics. See [YFINANCE_INTEGRATION.md](./YFINANCE_INTEGRATION.md) for detailed information.
 
-**Use your preferred IDE**
+### Key Features
+- Warren Buffett investment analysis
+- Real-time stock data with yfinance 2.0.0
+- Thai stock market (SET) support
+- Comprehensive financial metrics
+- DCA (Dollar Cost Averaging) simulation
+- Portfolio tracking and analysis
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Setup and Development
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Frontend Development
 
-Follow these steps:
+Follow these steps for frontend development:
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.
@@ -36,29 +45,55 @@ npm i
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Python Backend Setup
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+For full functionality with yfinance 2.0.0:
 
-**Use GitHub Codespaces**
+```sh
+# Install Python dependencies
+pip install -r requirements.txt
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Run the Python backend
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
-## What technologies are used for this project?
+# Or use Docker
+docker-compose up -d
+```
+
+### Environment Variables
+
+Set the following environment variable in your Supabase Edge Function environment:
+
+- `PYTHON_BACKEND_URL`: URL of the Python backend (e.g., `http://localhost:8000`)
+
+## Development Workflow
+
+1. **Frontend Development**: Use the standard React/Vite workflow
+2. **Backend Development**: Run the Python FastAPI server locally
+3. **Edge Functions**: Deploy to Supabase with the appropriate environment variables
+4. **Testing**: Use the test scripts in `backend/test_service.py`
+
+## Technologies
 
 This project is built with:
 
+### Frontend
 - Vite
 - TypeScript
 - React
 - shadcn-ui
 - Tailwind CSS
+
+### Backend
+- Python 3.12
+- FastAPI
+- yfinance 2.0.0
+- pandas
+- numpy
+
+### Infrastructure
+- Supabase (Database & Edge Functions)
+- Docker (Python backend deployment)
 
 ## How can I deploy this project?
 
