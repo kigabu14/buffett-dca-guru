@@ -1,39 +1,40 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-// Interface definitions
+// Interface definitions - ข้อมูลหุ้น / Stock Data Interface
+// null values represent "no data from backend/Yahoo" - ค่า null แสดงถึง "ไม่มีข้อมูลจาก backend/Yahoo"
 export interface StockData {
   symbol: string;
   name: string;
   market: string;
   currency: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  marketCap: number;
-  pe: number;
-  eps: number;
-  dividendYield: number;
-  dividendRate: number;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+  marketCap: number | null;
+  pe: number | null;
+  eps: number | null;
+  dividendYield: number | null;
+  dividendRate: number | null;
   exDividendDate: string | null;
   dividendDate: string | null;
   earningsDate: string | null;
-  forwardDividendYield: number;
-  dayHigh: number;
-  dayLow: number;
-  weekHigh52: number;
-  weekLow52: number;
-  volume: number;
+  forwardDividendYield: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  weekHigh52: number | null;
+  weekLow52: number | null;
+  volume: number | null;
   
-  // Warren Buffett Analysis Metrics
-  roe: number;
-  debtToEquity: number;
-  profitMargin: number;
-  operatingMargin: number;
-  currentRatio: number;
+  // Warren Buffett Analysis Metrics - เมตริกการวิเคราะห์แบบ Warren Buffett
+  roe: number | null;
+  debtToEquity: number | null;
+  profitMargin: number | null;
+  operatingMargin: number | null;
+  currentRatio: number | null;
   
-  // Sample data flag
-  isSampleData?: boolean;
+  // Sample data flag - removed as per requirements
+  // isSampleData?: boolean;
 }
 
 interface StockResponse {
@@ -65,35 +66,46 @@ export class YahooFinanceService {
 
       if (data?.data && data.data.length > 0) {
         const stockData = data.data[0];
+        
+        // Calculate change and changePercent only if both current_price and previous_close are present and valid
+        // คำนวณการเปลี่ยนแปลงเฉพาะเมื่อมี current_price และ previous_close ที่ถูกต้อง
+        let change = null;
+        let changePercent = null;
+        
+        if (stockData.current_price != null && stockData.previous_close != null && stockData.previous_close !== 0) {
+          change = stockData.current_price - stockData.previous_close;
+          changePercent = (change / stockData.previous_close) * 100;
+        }
+        
         return {
           symbol: stockData.symbol,
           name: stockData.company_name || stockData.name || symbol,
           market: stockData.market,
-          currency: symbol.includes('.BK') ? 'THB' : 'USD',
-          price: stockData.current_price || 0,
-          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
-          changePercent: stockData.previous_close ? 
-            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
-          marketCap: stockData.market_cap || 0,
-          pe: stockData.pe_ratio || 0,
-          eps: stockData.eps || 0,
-          dividendYield: stockData.dividend_yield || 0,
-          dividendRate: stockData.dividend_rate || 0,
+          // Use currency from backend if available, otherwise minimal fallback
+          // ใช้สกุลเงินจาก backend หากมี ไม่เช่นนั้นใช้ fallback น้อยที่สุด
+          currency: stockData.currency || (symbol.includes('.BK') ? 'THB' : 'USD'),
+          price: stockData.current_price ?? null,
+          change,
+          changePercent,
+          marketCap: stockData.market_cap ?? null,
+          pe: stockData.pe_ratio ?? null,
+          eps: stockData.eps ?? null,
+          dividendYield: stockData.dividend_yield ?? null,
+          dividendRate: stockData.dividend_rate ?? null,
           exDividendDate: stockData.ex_dividend_date || null,
           dividendDate: stockData.dividend_date || null,
           earningsDate: stockData.earnings_date || null,
-          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
-          dayHigh: stockData.day_high || 0,
-          dayLow: stockData.day_low || 0,
-          weekHigh52: stockData.week_high_52 || 0,
-          weekLow52: stockData.week_low_52 || 0,
-          volume: stockData.volume || 0,
-          roe: stockData.roe || 0,
-          debtToEquity: stockData.debt_to_equity || 0,
-          profitMargin: stockData.profit_margin || 0,
-          operatingMargin: stockData.operating_margin || 0,
-          currentRatio: stockData.current_ratio || 0,
-          isSampleData: false
+          forwardDividendYield: stockData.forward_dividend_yield ?? null,
+          dayHigh: stockData.day_high ?? null,
+          dayLow: stockData.day_low ?? null,
+          weekHigh52: stockData.week_high_52 ?? null,
+          weekLow52: stockData.week_low_52 ?? null,
+          volume: stockData.volume ?? null,
+          roe: stockData.roe ?? null,
+          debtToEquity: stockData.debt_to_equity ?? null,
+          profitMargin: stockData.profit_margin ?? null,
+          operatingMargin: stockData.operating_margin ?? null,
+          currentRatio: stockData.current_ratio ?? null
         };
       } else {
         throw new Error(`ไม่พบข้อมูลหุ้น ${symbol}`);
@@ -119,36 +131,48 @@ export class YahooFinanceService {
       }
 
       if (data?.data && data.data.length > 0) {
-        return data.data.map((stockData: any) => ({
-          symbol: stockData.symbol,
-          name: stockData.company_name || stockData.name || stockData.symbol,
-          market: stockData.market,
-          currency: stockData.symbol.includes('.BK') ? 'THB' : 'USD',
-          price: stockData.current_price || 0,
-          change: stockData.current_price ? stockData.current_price - (stockData.previous_close || 0) : 0,
-          changePercent: stockData.previous_close ? 
-            ((stockData.current_price - stockData.previous_close) / stockData.previous_close) * 100 : 0,
-          marketCap: stockData.market_cap || 0,
-          pe: stockData.pe_ratio || 0,
-          eps: stockData.eps || 0,
-          dividendYield: stockData.dividend_yield || 0,
-          dividendRate: stockData.dividend_rate || 0,
-          exDividendDate: stockData.ex_dividend_date || null,
-          dividendDate: stockData.dividend_date || null,
-          earningsDate: stockData.earnings_date || null,
-          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
-          dayHigh: stockData.day_high || 0,
-          dayLow: stockData.day_low || 0,
-          weekHigh52: stockData.week_high_52 || 0,
-          weekLow52: stockData.week_low_52 || 0,
-          volume: stockData.volume || 0,
-          roe: stockData.roe || 0,
-          debtToEquity: stockData.debt_to_equity || 0,
-          profitMargin: stockData.profit_margin || 0,
-          operatingMargin: stockData.operating_margin || 0,
-          currentRatio: stockData.current_ratio || 0,
-          isSampleData: false
-        }));
+        return data.data.map((stockData: any) => {
+          // Calculate change and changePercent only if both current_price and previous_close are present and valid
+          // คำนวณการเปลี่ยนแปลงเฉพาะเมื่อมี current_price และ previous_close ที่ถูกต้อง
+          let change = null;
+          let changePercent = null;
+          
+          if (stockData.current_price != null && stockData.previous_close != null && stockData.previous_close !== 0) {
+            change = stockData.current_price - stockData.previous_close;
+            changePercent = (change / stockData.previous_close) * 100;
+          }
+          
+          return {
+            symbol: stockData.symbol,
+            name: stockData.company_name || stockData.name || stockData.symbol,
+            market: stockData.market,
+            // Use currency from backend if available, otherwise minimal fallback  
+            // ใช้สกุลเงินจาก backend หากมี ไม่เช่นนั้นใช้ fallback น้อยที่สุด
+            currency: stockData.currency || (stockData.symbol.includes('.BK') ? 'THB' : 'USD'),
+            price: stockData.current_price ?? null,
+            change,
+            changePercent,
+            marketCap: stockData.market_cap ?? null,
+            pe: stockData.pe_ratio ?? null,
+            eps: stockData.eps ?? null,
+            dividendYield: stockData.dividend_yield ?? null,
+            dividendRate: stockData.dividend_rate ?? null,
+            exDividendDate: stockData.ex_dividend_date || null,
+            dividendDate: stockData.dividend_date || null,
+            earningsDate: stockData.earnings_date || null,
+            forwardDividendYield: stockData.forward_dividend_yield ?? null,
+            dayHigh: stockData.day_high ?? null,
+            dayLow: stockData.day_low ?? null,
+            weekHigh52: stockData.week_high_52 ?? null,
+            weekLow52: stockData.week_low_52 ?? null,
+            volume: stockData.volume ?? null,
+            roe: stockData.roe ?? null,
+            debtToEquity: stockData.debt_to_equity ?? null,
+            profitMargin: stockData.profit_margin ?? null,
+            operatingMargin: stockData.operating_margin ?? null,
+            currentRatio: stockData.current_ratio ?? null
+          };
+        });
       } else {
         throw new Error('ไม่พบข้อมูลหุ้น');
       }
@@ -193,76 +217,78 @@ export class YahooFinanceService {
   }
 
   // Calculate DCA Score based on Warren Buffett principles
+  // Updated to handle null values properly - อัปเดตเพื่อจัดการค่า null อย่างถูกต้อง
   static calculateDCAScore(stock: StockData): number {
     let score = 0;
     
-    // 1. P/E Ratio (lower is better, < 15 is good)
-    if (stock.pe > 0 && stock.pe < 15) score += 1;
-    else if (stock.pe > 0 && stock.pe < 25) score += 0.5;
+    // 1. P/E Ratio (lower is better, < 15 is good) - only if not null
+    if (stock.pe != null && stock.pe > 0 && stock.pe < 15) score += 1;
+    else if (stock.pe != null && stock.pe > 0 && stock.pe < 25) score += 0.5;
     
-    // 2. Market Cap (prefer large companies for stability)
-    if (stock.marketCap > 10000000000) score += 1; // > 10B
-    else if (stock.marketCap > 1000000000) score += 0.5; // > 1B
+    // 2. Market Cap (prefer large companies for stability) - only if not null
+    if (stock.marketCap != null && stock.marketCap > 10000000000) score += 1; // > 10B
+    else if (stock.marketCap != null && stock.marketCap > 1000000000) score += 0.5; // > 1B
     
-    // 3. Dividend Yield (consistent dividend payers)
-    if (stock.dividendYield > 0.02) score += 1; // > 2%
-    else if (stock.dividendYield > 0) score += 0.5;
+    // 3. Dividend Yield (consistent dividend payers) - only if not null
+    if (stock.dividendYield != null && stock.dividendYield > 0.02) score += 1; // > 2%
+    else if (stock.dividendYield != null && stock.dividendYield > 0) score += 0.5;
     
-    // 4. EPS (positive earnings)
-    if (stock.eps > 0) score += 1;
+    // 4. EPS (positive earnings) - only if not null
+    if (stock.eps != null && stock.eps > 0) score += 1;
     
-    // 5. Price consistency (not too volatile)
-    if (Math.abs(stock.changePercent) <= 5) score += 1;
+    // 5. Price consistency (not too volatile) - only if not null
+    if (stock.changePercent != null && Math.abs(stock.changePercent) <= 5) score += 1;
     
-    // 6. ROE (Return on Equity - higher is better)
-    if (stock.roe > 0.15) score += 1; // > 15%
-    else if (stock.roe > 0.1) score += 0.5; // > 10%
+    // 6. ROE (Return on Equity - higher is better) - only if not null
+    if (stock.roe != null && stock.roe > 0.15) score += 1; // > 15%
+    else if (stock.roe != null && stock.roe > 0.1) score += 0.5; // > 10%
     
-    // 7. Debt to Equity (lower is better)
-    if (stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 1; // < 30%
-    else if (stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 0.5; // < 50%
+    // 7. Debt to Equity (lower is better) - only if not null
+    if (stock.debtToEquity != null && stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 1; // < 30%
+    else if (stock.debtToEquity != null && stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 0.5; // < 50%
     
-    // 8. Profit Margin (higher is better)
-    if (stock.profitMargin > 0.2) score += 1; // > 20%
-    else if (stock.profitMargin > 0.1) score += 0.5; // > 10%
+    // 8. Profit Margin (higher is better) - only if not null
+    if (stock.profitMargin != null && stock.profitMargin > 0.2) score += 1; // > 20%
+    else if (stock.profitMargin != null && stock.profitMargin > 0.1) score += 0.5; // > 10%
     
     return Math.round(score);
   }
 
   // Calculate Buffett Score with 11 criteria
+  // Updated to handle null values properly - อัปเดตเพื่อจัดการค่า null อย่างถูกต้อง
   static calculateBuffettScore(stock: StockData): { score: number; recommendation: string } {
     let score = 0;
     
-    // 1. ROE > 15%
-    if (stock.roe > 0.15) score += 2;
-    else if (stock.roe > 0.10) score += 1;
+    // 1. ROE > 15% - only if not null
+    if (stock.roe != null && stock.roe > 0.15) score += 2;
+    else if (stock.roe != null && stock.roe > 0.10) score += 1;
     
-    // 2. Debt to Equity < 0.5
-    if (stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 2;
-    else if (stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 1;
+    // 2. Debt to Equity < 0.5 - only if not null
+    if (stock.debtToEquity != null && stock.debtToEquity > 0 && stock.debtToEquity < 0.3) score += 2;
+    else if (stock.debtToEquity != null && stock.debtToEquity > 0 && stock.debtToEquity < 0.5) score += 1;
     
-    // 3. Profit Margin > 15%
-    if (stock.profitMargin > 0.15) score += 2;
-    else if (stock.profitMargin > 0.10) score += 1;
+    // 3. Profit Margin > 15% - only if not null
+    if (stock.profitMargin != null && stock.profitMargin > 0.15) score += 2;
+    else if (stock.profitMargin != null && stock.profitMargin > 0.10) score += 1;
     
-    // 4. Operating Margin > 15%
-    if (stock.operatingMargin > 0.15) score += 2;
-    else if (stock.operatingMargin > 0.10) score += 1;
+    // 4. Operating Margin > 15% - only if not null
+    if (stock.operatingMargin != null && stock.operatingMargin > 0.15) score += 2;
+    else if (stock.operatingMargin != null && stock.operatingMargin > 0.10) score += 1;
     
-    // 5. Current Ratio > 1.5
-    if (stock.currentRatio > 1.5) score += 2;
-    else if (stock.currentRatio > 1.0) score += 1;
+    // 5. Current Ratio > 1.5 - only if not null
+    if (stock.currentRatio != null && stock.currentRatio > 1.5) score += 2;
+    else if (stock.currentRatio != null && stock.currentRatio > 1.0) score += 1;
     
-    // 6. P/E Ratio reasonable
-    if (stock.pe > 0 && stock.pe < 15) score += 2;
-    else if (stock.pe > 0 && stock.pe < 25) score += 1;
+    // 6. P/E Ratio reasonable - only if not null
+    if (stock.pe != null && stock.pe > 0 && stock.pe < 15) score += 2;
+    else if (stock.pe != null && stock.pe > 0 && stock.pe < 25) score += 1;
     
-    // 7. Consistent dividend payments
-    if (stock.dividendYield > 0.02) score += 2;
-    else if (stock.dividendYield > 0) score += 1;
+    // 7. Consistent dividend payments - only if not null
+    if (stock.dividendYield != null && stock.dividendYield > 0.02) score += 2;
+    else if (stock.dividendYield != null && stock.dividendYield > 0) score += 1;
     
-    // 8. EPS Growth (positive EPS)
-    if (stock.eps > 0) score += 1;
+    // 8. EPS Growth (positive EPS) - only if not null
+    if (stock.eps != null && stock.eps > 0) score += 1;
     
     let recommendation = 'AVOID';
     if (score >= 12) recommendation = 'STRONG_BUY';
@@ -370,10 +396,11 @@ export class YahooFinanceService {
     ).slice(0, 20);
   }
 
-  // Utility methods for formatting
-  static formatCurrency(value: number, currency?: string): string {
+  // Utility methods for formatting - ฟังก์ชันสำหรับจัดรูปแบบ
+  // All formatting functions return '-' for null values - ฟังก์ชันจัดรูปแบบทั้งหมดจะคืนค่า '-' สำหรับค่า null
+  static formatCurrency(value: number | null, currency?: string): string {
     if (value === null || value === undefined || isNaN(value)) {
-      return currency === 'THB' ? '฿0.00' : '$0.00';
+      return '-';
     }
     const symbol = currency === 'THB' ? '฿' : '$';
     return `${symbol}${value.toLocaleString('en-US', { 
@@ -382,7 +409,10 @@ export class YahooFinanceService {
     })}`;
   }
 
-  static formatLargeNumber(value: number): string {
+  static formatLargeNumber(value: number | null): string {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '-';
+    }
     if (value >= 1e12) {
       return `${(value / 1e12).toFixed(1)}T`;
     } else if (value >= 1e9) {
@@ -395,8 +425,19 @@ export class YahooFinanceService {
     return value.toFixed(0);
   }
 
-  static formatPercentage(value: number): string {
+  static formatPercentage(value: number | null): string {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '-';
+    }
     return `${(value * 100).toFixed(2)}%`;
+  }
+
+  // Helper function for displaying price with currency - ฟังก์ชันช่วยสำหรับแสดงราคาพร้อมสกุลเงิน
+  static formatDisplayPrice(value: number | null, currency?: string): string {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '-';
+    }
+    return this.formatCurrency(value, currency);
   }
 
   static formatDate(dateString: string | null): string {
