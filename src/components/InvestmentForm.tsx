@@ -297,7 +297,7 @@ export const InvestmentForm = ({ editingInvestment, onSubmit, onCancel }: Invest
               min="0"
               step="0.01"
             />
-            {stockData?.dividendYield !== null && (
+            {stockData && stockData.dividendYield != null && (
               <p className="text-xs text-muted-foreground">
                 อัตราปันผลปัจจุบัน: {stockData.dividendYield === 0 ? '0.00%' : (stockData.dividendYield * 100).toFixed(2) + '%'}
               </p>
