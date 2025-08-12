@@ -80,10 +80,17 @@ export const RealTimeStockPrice = ({ symbol, buyPrice, className = "" }: RealTim
       </div>
       
       <div className="flex items-center justify-between text-sm">
-        <div className={`flex items-center gap-1 ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          <span>{change >= 0 ? '+' : ''}{change.toFixed(2)}</span>
-          <span>({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
-        </div>
+        {(() => {
+          const hasChange = typeof change === 'number' && !isNaN(change);
+          const hasChangePercent = typeof changePercent === 'number' && !isNaN(changePercent);
+          const colorClass = hasChange ? (change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-muted-foreground') : 'text-muted-foreground';
+          return (
+            <div className={`flex items-center gap-1 ${colorClass}`}>
+              <span>{hasChange ? `${change > 0 ? '+' : ''}${change.toFixed(2)}` : '-'}</span>
+              <span>({hasChangePercent ? `${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%` : '-'})</span>
+            </div>
+          );
+        })()}
         
         {buyPrice && buyPrice > 0 && (
           <div className={`flex items-center gap-1 ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>

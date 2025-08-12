@@ -50,7 +50,11 @@ const Dashboard = () => {
       
       // Fetch current prices from Yahoo Finance for accurate calculation
       if (data && data.length > 0) {
-        const symbols = [...new Set(data.map(stock => stock.symbol))];
+        const symbols = [...new Set(data.map(stock => (
+          stock.market === 'SET' && !stock.symbol.includes('.BK')
+            ? `${stock.symbol}.BK`
+            : stock.symbol
+        )))] ;
         try {
           const stockPrices = await YahooFinanceService.getStocks(symbols);
           const priceMap = new Map(stockPrices.map(s => [s.symbol, s.price]));

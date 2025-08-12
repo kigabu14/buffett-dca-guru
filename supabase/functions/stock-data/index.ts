@@ -34,17 +34,13 @@ function normalizeSymbol(raw: string, marketHint?: string): string {
     return cleanSymbol;
   }
   
-  // If marketHint is explicitly SET, append .BK
+  // Only append .BK when market is explicitly specified as SET
   if (marketHint === 'SET') {
     return `${cleanSymbol}.BK`;
   }
   
-  // If no marketHint and symbol matches Thai pattern (1-6 letters), assume Thai stock
-  if (!marketHint && /^[A-Z]{1,6}$/.test(cleanSymbol)) {
-    return `${cleanSymbol}.BK`;
-  }
-  
-  // Leave other symbols (NASDAQ, NYSE, etc.) intact
+  // Do not auto-append any suffix when market is unknown.
+  // Frontend will pass the correct suffix (e.g., .BK) when appropriate.
   return cleanSymbol;
 }
 
