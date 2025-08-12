@@ -58,7 +58,7 @@ function inferMarket(symbol: string): string {
 }
 
 // Date conversion helper for Yahoo Finance epoch timestamps
-function convertEpochToDate(epoch: number | null): string | null {
+function epochToDate(epoch: number | null): string | null {
   if (!epoch || epoch === 0) return null;
   try {
     return new Date(epoch * 1000).toISOString().slice(0, 10);
@@ -216,11 +216,18 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       };
     }
 
-    // Calculate change - prefer using meta.previousClose when available
-    const finalCurrentPrice = currentPrice || previousClose || 0;
-    const finalPreviousClose = previousClose || (currentPrice ? finalCurrentPrice : 0);
-    const change = finalCurrentPrice - finalPreviousClose;
-    const changePercent = finalPreviousClose > 0 ? (change / finalPreviousClose) * 100 : 0;
+    // Calculate change & change_percent only if both current_price and previous_close exist
+    let change = null;
+    let changePercent = null;
+    
+    if (currentPrice !== null && currentPrice !== undefined && 
+        previousClose !== null && previousClose !== undefined && previousClose > 0) {
+      change = currentPrice - previousClose;
+      changePercent = (change / previousClose) * 100;
+    }
+
+    const finalCurrentPrice = currentPrice ?? previousClose ?? null;
+    const finalPreviousClose = previousClose ?? null;
 
     // Extract summary data if available
     let summaryResult = null;
@@ -249,11 +256,11 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       week_high_52: summaryDetail.fiftyTwoWeekHigh?.raw || defaultKeyStats.fiftyTwoWeekHigh?.raw || meta.fiftyTwoWeekHigh || null,
       week_low_52: summaryDetail.fiftyTwoWeekLow?.raw || defaultKeyStats.fiftyTwoWeekLow?.raw || meta.fiftyTwoWeekLow || null,
       
-      // Dividend information - keep raw decimal form (0.0345 for 3.45%)
-      dividend_rate: summaryDetail.dividendRate?.raw || financialInfo.trailingAnnualDividendRate || null,
-      dividend_yield: summaryDetail.dividendYield?.raw || summaryDetail.trailingAnnualDividendYield?.raw || null,
-      ex_dividend_date: convertEpochToDate(summaryDetail.exDividendDate?.raw),
-      dividend_date: convertEpochToDate(summaryDetail.dividendDate?.raw),
+      // Dividend information - use null-coalescing and proper mapping
+      dividend_rate: summaryDetail.dividendRate?.raw ?? financialInfo.trailingAnnualDividendRate?.raw ?? null,
+      dividend_yield: summaryDetail.dividendYield?.raw ?? financialInfo.dividendYield?.raw ?? null,
+      ex_dividend_date: epochToDate(summaryDetail.exDividendDate?.raw),
+      dividend_date: epochToDate(summaryDetail.dividendDate?.raw),
       payout_ratio: summaryDetail.payoutRatio?.raw || defaultKeyStats.payoutRatio?.raw || null,
       
       // Financial ratios
@@ -584,6 +591,33 @@ Deno.serve(async (req) => {
     });
 
     const apiData = await Promise.all(updatePromises);
+
+    // Upsert xd_calendar rows when both ex_dividend_date and dividend_rate are available
+    const calendarPromises = stockQuotes
+      .filter(quote => quote.ex_dividend_date && quote.dividend_rate)
+      .map(async (quote) => {
+        const calendarData = {
+          symbol: quote.symbol,
+          ex_dividend_date: quote.ex_dividend_date,
+          dividend_amount: quote.dividend_rate,
+          dividend_yield: quote.dividend_yield ? quote.dividend_yield * 100 : null, // Convert to percentage
+          payment_date: quote.dividend_date,
+        };
+
+        const { error } = await supabase
+          .from('xd_calendar')
+          .upsert(calendarData, { 
+            onConflict: 'symbol,ex_dividend_date',
+            ignoreDuplicates: false 
+          });
+
+        if (error) {
+          console.error(`Error updating xd_calendar for ${quote.symbol}:`, error);
+        }
+      });
+
+    // Wait for calendar updates to complete
+    await Promise.all(calendarPromises);
 
     infoLog(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
 
