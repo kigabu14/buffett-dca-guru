@@ -59,6 +59,11 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Database & Edge Functions)
+
+## Documentation
+
+- [Yahoo Finance Data Mapping](docs/YAHOO_DATA.md) - Details on how Yahoo Finance API data is mapped to our database schema
 
 ## How can I deploy this project?
 
