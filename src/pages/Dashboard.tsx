@@ -105,7 +105,8 @@ const Dashboard = () => {
     return "bg-red-100 text-red-800";
   };
 
-  const getPriceChangeColor = (change: number) => {
+  const getPriceChangeColor = (change?: number | null) => {
+    if (typeof change !== 'number' || isNaN(change)) return "text-muted-foreground";
     if (change > 0) return "text-green-600";
     if (change < 0) return "text-red-600";
     return "text-muted-foreground";
@@ -115,8 +116,8 @@ const Dashboard = () => {
     totalStocks: stockData.length,
     gainers: stockData.filter(s => s.changePercent > 0).length,
     losers: stockData.filter(s => s.changePercent < 0).length,
-    avgChange: stockData.length > 0 ? 
-      stockData.reduce((sum, s) => sum + s.changePercent, 0) / stockData.length : 0
+    avgChange: stockData.length > 0 ?
+      stockData.reduce((sum, s) => sum + (typeof s.changePercent === 'number' ? s.changePercent : 0), 0) / stockData.length : 0
   };
 
   return (
@@ -310,10 +311,10 @@ const Dashboard = () => {
                         {YahooFinanceService.formatCurrency(stock.price, stock.currency)}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.change)}`}>
-                        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}
+                        {typeof stock.change === 'number' ? `${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}` : '-'}
                       </TableCell>
                       <TableCell className={`text-right ${getPriceChangeColor(stock.changePercent)}`}>
-                        {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                        {typeof stock.changePercent === 'number' ? `${stock.changePercent >= 0 ? '+' : ''}${stock.changePercent.toFixed(2)}%` : '-'}
                       </TableCell>
                       <TableCell className="text-right">
                         {stock.volume > 0 ? YahooFinanceService.formatLargeNumber(stock.volume) : '-'}
