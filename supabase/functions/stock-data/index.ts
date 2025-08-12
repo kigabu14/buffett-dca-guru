@@ -7,39 +7,120 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Environment variables for configuration
+const LOG_LEVEL = Deno.env.get('LOG_LEVEL') || 'info';
+
+// Helper function to log based on level
+function debugLog(...args: any[]) {
+  if (LOG_LEVEL === 'debug') {
+    console.log(...args);
+  }
+}
+
+function infoLog(...args: any[]) {
+  console.log(...args);
+}
+
 // Yahoo Finance API endpoints
 const YAHOO_FINANCE_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart';
-const YAHOO_FINANCE_QUOTE = 'https://query2.finance.yahoo.com/v1/finance/screener';
 const YAHOO_FINANCE_QUOTESUMMARY = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary';
-const YAHOO_FINANCE_DIVIDENDS = 'https://query2.finance.yahoo.com/v7/finance/download';
+
+// Symbol normalization helper
+function normalizeSymbol(raw: string, marketHint?: string): string {
+  const cleanSymbol = raw.trim().toUpperCase();
+  
+  // If already has .BK suffix, keep as is
+  if (cleanSymbol.endsWith('.BK')) {
+    return cleanSymbol;
+  }
+  
+  // If marketHint is explicitly SET, append .BK
+  if (marketHint === 'SET') {
+    return `${cleanSymbol}.BK`;
+  }
+  
+  // If no marketHint and symbol matches Thai pattern (1-6 letters), assume Thai stock
+  if (!marketHint && /^[A-Z]{1,6}$/.test(cleanSymbol)) {
+    return `${cleanSymbol}.BK`;
+  }
+  
+  // Leave other symbols (NASDAQ, NYSE, etc.) intact
+  return cleanSymbol;
+}
+
+// Market inference helper
+function inferMarket(symbol: string): string {
+  if (symbol.endsWith('.BK')) {
+    return 'SET';
+  }
+  // Default to null for unknown markets - let existing logic handle
+  return 'NASDAQ'; // Keep existing behavior for now
+}
+
+// Date conversion helper for Yahoo Finance epoch timestamps
+function convertEpochToDate(epoch: number | null): string | null {
+  if (!epoch || epoch === 0) return null;
+  try {
+    return new Date(epoch * 1000).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+// Retry helper for Yahoo Finance API calls
+async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 1): Promise<Response> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      
+      // If successful or client error (4xx), return immediately
+      if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 429)) {
+        return response;
+      }
+      
+      // If server error or rate limit, retry
+      if (attempt < maxRetries && [429, 500, 502, 503].includes(response.status)) {
+        const delay = 300 * Math.pow(2, attempt);
+        debugLog(`HTTP ${response.status} for ${url}, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries) {
+        const delay = 300 * Math.pow(2, attempt);
+        debugLog(`Network error for ${url}, retrying in ${delay}ms...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+    }
+  }
+  
+  throw lastError!;
+}
 
 // Fetch comprehensive financial data from multiple Yahoo Finance endpoints
 async function fetchFinancialData(symbol: string) {
   try {
-    console.log(`Fetching data for ${symbol} from Yahoo Finance`);
+    debugLog(`Fetching data for ${symbol} from Yahoo Finance`);
     
-    // Clean symbol for different markets
-    let cleanSymbol = symbol.trim();
+    // Normalize symbol for Yahoo Finance API
+    const normalizedSymbol = normalizeSymbol(symbol);
+    const market = inferMarket(normalizedSymbol);
     
-    // For Thai stocks, ensure .BK suffix
-    if (symbol.includes('.BK') || symbol.includes('.SET')) {
-      if (!cleanSymbol.includes('.BK')) {
-        cleanSymbol = cleanSymbol.replace('.SET', '.BK');
-        if (!cleanSymbol.includes('.BK')) {
-          cleanSymbol = cleanSymbol + '.BK';
-        }
-      }
-    }
-
-    console.log(`Using symbol: ${cleanSymbol}`);
+    debugLog(`Using normalized symbol: ${normalizedSymbol}, inferred market: ${market}`);
 
     // Fetch from multiple endpoints in parallel
     const [chartData, summaryData] = await Promise.all([
-      fetchChartData(cleanSymbol),
-      fetchQuoteSummary(cleanSymbol)
+      fetchChartData(normalizedSymbol),
+      fetchQuoteSummary(normalizedSymbol)
     ]);
 
-    return parseComprehensiveData(chartData, summaryData, symbol, cleanSymbol);
+    return parseComprehensiveData(chartData, summaryData, symbol, normalizedSymbol, market);
     
   } catch (error) {
     console.error(`Error fetching financial data for ${symbol}:`, error);
@@ -51,7 +132,7 @@ async function fetchFinancialData(symbol: string) {
 async function fetchChartData(symbol: string) {
   const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
   
-  const response = await fetch(chartUrl, {
+  const response = await fetchWithRetry(chartUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Accept': 'application/json'
@@ -79,7 +160,7 @@ async function fetchQuoteSummary(symbol: string) {
   const summaryUrl = `${YAHOO_FINANCE_QUOTESUMMARY}/${symbol}?modules=${modules}`;
   
   try {
-    const response = await fetch(summaryUrl, {
+    const response = await fetchWithRetry(summaryUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
@@ -87,18 +168,18 @@ async function fetchQuoteSummary(symbol: string) {
     });
 
     if (!response.ok) {
-      console.warn(`Summary API failed for ${symbol}, status: ${response.status}`);
+      debugLog(`Summary API failed for ${symbol}, status: ${response.status}`);
       return null;
     }
     
     return await response.json();
   } catch (error) {
-    console.warn(`Error fetching summary for ${symbol}:`, error);
+    debugLog(`Error fetching summary for ${symbol}:`, error);
     return null;
   }
 }
 
-function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, cleanSymbol: string) {
+function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol: string, normalizedSymbol: string, market: string) {
   try {
     const result = chartData?.chart?.result?.[0];
     if (!result) {
@@ -112,94 +193,109 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       throw new Error('Invalid chart data structure');
     }
 
-    // Extract basic price data
-    const currentPrice = meta.regularMarketPrice || meta.previousClose || 0;
-    const previousClose = meta.previousClose || currentPrice;
-    const change = currentPrice - previousClose;
-    const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
-
-    // Determine market and currency
-    const isThaiStock = originalSymbol.includes('.BK') || originalSymbol.includes('.SET');
-    const market = isThaiStock ? 'SET' : (meta.exchangeName || 'NASDAQ');
-    const currency = isThaiStock ? 'THB' : (meta.currency || 'USD');
-
-    // Get latest quote data from chart
-    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || 0;
-    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || currentPrice * 1.02;
-    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || currentPrice * 0.98;
-    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || previousClose;
-
-    // Extract financial data from summary API
-    let financialData = {};
-    let dividendData = {};
-    let keyStats = {};
+    // Extract basic price data - prefer meta.previousClose over derived calculation
+    const currentPrice = meta.regularMarketPrice;
+    const previousClose = meta.previousClose;
     
-    if (summaryData?.quoteSummary?.result?.[0]) {
-      const summaryResult = summaryData.quoteSummary.result[0];
-      
-      // Financial metrics
-      const defaultKeyStats = summaryResult.defaultKeyStatistics || {};
-      const financialInfo = summaryResult.financialData || {};
-      const summaryDetail = summaryResult.summaryDetail || {};
-      const price = summaryResult.price || {};
-      
-      financialData = {
-        marketCap: price.marketCap?.raw || meta.marketCap || currentPrice * 1000000000,
-        pe: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
-            summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || 15.0,
-        eps: defaultKeyStats.trailingEps?.raw || 
-             financialInfo.trailingEps?.raw || (currentPrice / 15.0),
-        bookValue: defaultKeyStats.bookValue?.raw || currentPrice * 0.8,
-        priceToBook: defaultKeyStats.priceToBook?.raw || 1.5,
-        
-        // Financial health metrics
-        profitMargin: financialInfo.profitMargins?.raw || 0.15,
-        operatingMargin: financialInfo.operatingMargins?.raw || 0.20,
-        returnOnEquity: financialInfo.returnOnEquity?.raw || 0.15,
-        debtToEquity: financialInfo.debtToEquity?.raw || 0.5,
-        currentRatio: financialInfo.currentRatio?.raw || 2.0,
-        
-        // Growth metrics
-        revenueGrowth: financialInfo.revenueGrowth?.raw || 0.1,
-        earningsGrowth: financialInfo.earningsGrowth?.raw || 0.1
-      };
-      
-      // Dividend information
-      dividendData = {
-        dividendYield: summaryDetail.dividendYield?.raw || 
-                      summaryDetail.trailingAnnualDividendYield?.raw || 0.03,
-        dividendRate: summaryDetail.dividendRate?.raw || 
-                     summaryDetail.trailingAnnualDividendRate?.raw || (currentPrice * 0.03),
-        exDividendDate: summaryDetail.exDividendDate?.fmt || null,
-        dividendDate: summaryDetail.dividendDate?.fmt || null,
-        payoutRatio: summaryDetail.payoutRatio?.raw || null
-      };
-      
-      // Additional key statistics
-      keyStats = {
-        fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || 
-                         defaultKeyStats.fiftyTwoWeekHigh?.raw || 
-                         meta.fiftyTwoWeekHigh || (currentPrice * 1.3),
-        fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || 
-                        defaultKeyStats.fiftyTwoWeekLow?.raw || 
-                        meta.fiftyTwoWeekLow || (currentPrice * 0.7),
-        beta: defaultKeyStats.beta?.raw || 1.0,
-        sharesOutstanding: defaultKeyStats.sharesOutstanding?.raw || 
-                          price.sharesOutstanding?.raw || 1000000000
+    // If neither current price nor previous close available, this is a failed fetch
+    if (!currentPrice && !previousClose) {
+      debugLog(`No usable price data for ${originalSymbol}`);
+      return {
+        symbol: normalizedSymbol,
+        name: normalizedSymbol,
+        price: null,
+        current_price: null,
+        previous_close: null,
+        change: null,
+        changePercent: null,
+        market: market,
+        currency: null,
+        success: false,
+        source: 'fallback',
+        is_estimated: false
       };
     }
 
-    console.log(`Successfully parsed comprehensive data for ${originalSymbol}: price=${currentPrice}, PE=${financialData.pe}, dividend=${dividendData.dividendYield}`);
+    // Calculate change - prefer using meta.previousClose when available
+    const finalCurrentPrice = currentPrice || previousClose || 0;
+    const finalPreviousClose = previousClose || (currentPrice ? finalCurrentPrice : 0);
+    const change = finalCurrentPrice - finalPreviousClose;
+    const changePercent = finalPreviousClose > 0 ? (change / finalPreviousClose) * 100 : 0;
 
-    return {
-      symbol: originalSymbol,
-      name: meta.longName || meta.shortName || cleanSymbol,
-      price: currentPrice,
-      current_price: currentPrice,
+    // Extract summary data if available
+    let summaryResult = null;
+    if (summaryData?.quoteSummary?.result?.[0]) {
+      summaryResult = summaryData.quoteSummary.result[0];
+    }
+
+    const defaultKeyStats = summaryResult?.defaultKeyStatistics || {};
+    const financialInfo = summaryResult?.financialData || {};
+    const summaryDetail = summaryResult?.summaryDetail || {};
+    const price = summaryResult?.price || {};
+    const summaryProfile = summaryResult?.summaryProfile || {};
+
+    // Currency - prefer meta over summary
+    const currency = meta.currency || summaryDetail.currency || (market === 'SET' ? 'THB' : 'USD');
+
+    // Get latest quote data from chart
+    const volume = meta.regularMarketVolume || (quotes?.volume?.slice(-1)?.[0]) || null;
+    const dayHigh = meta.regularMarketDayHigh || (quotes?.high?.slice(-1)?.[0]) || null;
+    const dayLow = meta.regularMarketDayLow || (quotes?.low?.slice(-1)?.[0]) || null;
+    const open = meta.regularMarketOpen || (quotes?.open?.slice(-1)?.[0]) || null;
+
+    // Extended metrics mapping - use null when not available, no fabricated defaults
+    const extendedMetrics = {
+      // 52-week range
+      week_high_52: summaryDetail.fiftyTwoWeekHigh?.raw || defaultKeyStats.fiftyTwoWeekHigh?.raw || meta.fiftyTwoWeekHigh || null,
+      week_low_52: summaryDetail.fiftyTwoWeekLow?.raw || defaultKeyStats.fiftyTwoWeekLow?.raw || meta.fiftyTwoWeekLow || null,
+      
+      // Dividend information - keep raw decimal form (0.0345 for 3.45%)
+      dividend_rate: summaryDetail.dividendRate?.raw || financialInfo.trailingAnnualDividendRate || null,
+      dividend_yield: summaryDetail.dividendYield?.raw || summaryDetail.trailingAnnualDividendYield?.raw || null,
+      ex_dividend_date: convertEpochToDate(summaryDetail.exDividendDate?.raw),
+      dividend_date: convertEpochToDate(summaryDetail.dividendDate?.raw),
+      payout_ratio: summaryDetail.payoutRatio?.raw || defaultKeyStats.payoutRatio?.raw || null,
+      
+      // Financial ratios
+      book_value: defaultKeyStats.bookValue?.raw || financialInfo.bookValue?.raw || null,
+      price_to_book: defaultKeyStats.priceToBook?.raw || null,
+      beta: defaultKeyStats.beta?.raw || null,
+      
+      // Performance metrics
+      roe: financialInfo.returnOnEquity?.raw || defaultKeyStats.roe?.raw || null,
+      profit_margin: defaultKeyStats.profitMargins?.raw || financialInfo.profitMargins?.raw || null,
+      operating_margin: financialInfo.operatingMargins?.raw || defaultKeyStats.operatingMargins?.raw || null,
+      debt_to_equity: financialInfo.debtToEquity?.raw || defaultKeyStats.debtToEquity?.raw || null,
+      current_ratio: financialInfo.currentRatio?.raw || null,
+      
+      // Growth metrics
+      revenue_growth: financialInfo.revenueGrowth?.raw || null,
+      earnings_growth: financialInfo.earningsGrowth?.raw || null,
+      
+      // Basic financial data - no defaults, use null when missing
+      market_cap: price.marketCap?.raw || meta.marketCap || null,
+      pe_ratio: defaultKeyStats.forwardPE?.raw || defaultKeyStats.trailingPE?.raw || 
+               summaryDetail.forwardPE?.raw || summaryDetail.trailingPE?.raw || null,
+      eps: defaultKeyStats.trailingEps?.raw || financialInfo.trailingEps?.raw || null
+    };
+
+    // Company name - prefer from price module, fallback to profile, then meta
+    const companyName = price.longName || price.shortName || summaryProfile.longBusinessSummary || meta.longName || meta.shortName || normalizedSymbol;
+    
+    // Sector - prefer summaryProfile.sector, fallback to existing mapSector logic
+    const sector = summaryProfile.sector || mapSector(normalizedSymbol);
+
+    const successfulData = {
+      symbol: normalizedSymbol,
+      name: companyName,
+      price: finalCurrentPrice,
+      current_price: finalCurrentPrice,
+      previous_close: finalPreviousClose,
       change: change,
       changePercent: changePercent,
       market: market,
       currency: currency,
+      sector: sector,
       
       // Price data
       open: open,
@@ -207,108 +303,85 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       dayLow: dayLow,
       volume: volume,
       
-      // Financial metrics
-      marketCap: financialData.marketCap,
-      pe: financialData.pe,
-      eps: financialData.eps,
-      bookValue: financialData.bookValue,
-      priceToBook: financialData.priceToBook,
+      // Extended metrics
+      ...extendedMetrics,
       
-      // Dividend data
-      dividendYield: dividendData.dividendYield,
-      dividendRate: dividendData.dividendRate,
-      exDividendDate: dividendData.exDividendDate,
-      dividendDate: dividendData.dividendDate,
-      payoutRatio: dividendData.payoutRatio,
-      
-      // 52-week range
-      weekHigh52: keyStats.fiftyTwoWeekHigh,
-      weekLow52: keyStats.fiftyTwoWeekLow,
-      beta: keyStats.beta,
-      
-      // Financial health ratios
-      roe: financialData.returnOnEquity,
-      profitMargin: financialData.profitMargin,
-      operatingMargin: financialData.operatingMargin,
-      debtToEquity: financialData.debtToEquity,
-      currentRatio: financialData.currentRatio,
-      
-      // Growth metrics
-      revenueGrowth: financialData.revenueGrowth,
-      earningsGrowth: financialData.earningsGrowth,
-      
-      success: true
+      success: true,
+      source: 'live',
+      is_estimated: false
     };
+
+    infoLog(`${originalSymbol} → ${normalizedSymbol}: price=${finalCurrentPrice}, source=live, PE=${extendedMetrics.pe_ratio || 'null'}, dividend=${extendedMetrics.dividend_yield || 'null'}`);
+    debugLog(`Successfully parsed comprehensive data for ${originalSymbol}:`, successfulData);
+
+    return successfulData;
     
   } catch (error) {
     console.error(`Error parsing comprehensive data for ${originalSymbol}:`, error);
-    return createFallbackData(originalSymbol);
+    return createFallbackData(originalSymbol, normalizedSymbol, market);
   }
 }
 
-function createFallbackData(symbol: string) {
-  const isThaiStock = symbol.includes('.BK') || symbol.includes('.SET');
-  const market = isThaiStock ? 'SET' : 'NASDAQ';
-  const currency = isThaiStock ? 'THB' : 'USD';
-  const fallbackPrice = isThaiStock ? 10.0 : 100.0;
+function createFallbackData(originalSymbol: string, normalizedSymbol?: string, market?: string) {
+  const finalSymbol = normalizedSymbol || normalizeSymbol(originalSymbol);
+  const finalMarket = market || inferMarket(finalSymbol);
+  
+  infoLog(`${originalSymbol} → ${finalSymbol}: source=fallback, no usable data`);
   
   return {
-    symbol: symbol,
-    name: symbol,
-    price: fallbackPrice,
-    current_price: fallbackPrice,
-    change: 0,
-    changePercent: 0,
-    market: market,
-    currency: currency,
+    symbol: finalSymbol,
+    name: finalSymbol,
+    price: null,
+    current_price: null,
+    previous_close: null,
+    change: null,
+    changePercent: null,
+    market: finalMarket,
+    currency: finalMarket === 'SET' ? 'THB' : 'USD',
+    sector: mapSector(finalSymbol),
     
     // Price data
-    open: fallbackPrice,
-    dayHigh: fallbackPrice * 1.02,
-    dayLow: fallbackPrice * 0.98,
-    volume: 0,
+    open: null,
+    dayHigh: null,
+    dayLow: null,
+    volume: null,
     
-    // Financial metrics with defaults
-    marketCap: fallbackPrice * 1000000000,
-    pe: 15.0,
-    eps: fallbackPrice / 15.0,
-    bookValue: fallbackPrice * 0.8,
-    priceToBook: 1.25,
+    // Extended metrics - all null for fallback
+    market_cap: null,
+    pe_ratio: null,
+    eps: null,
+    book_value: null,
+    price_to_book: null,
     
     // Dividend data
-    dividendYield: 0.03,
-    dividendRate: fallbackPrice * 0.03,
-    exDividendDate: null,
-    dividendDate: null,
-    payoutRatio: null,
+    dividend_yield: null,
+    dividend_rate: null,
+    ex_dividend_date: null,
+    dividend_date: null,
+    payout_ratio: null,
     
     // 52-week range
-    weekHigh52: fallbackPrice * 1.3,
-    weekLow52: fallbackPrice * 0.7,
-    beta: 1.0,
+    week_high_52: null,
+    week_low_52: null,
+    beta: null,
     
     // Financial health ratios
-    roe: 0.15,
-    profitMargin: 0.15,
-    operatingMargin: 0.20,
-    debtToEquity: 0.5,
-    currentRatio: 2.0,
+    roe: null,
+    profit_margin: null,
+    operating_margin: null,
+    debt_to_equity: null,
+    current_ratio: null,
     
     // Growth metrics
-    revenueGrowth: 0.1,
-    earningsGrowth: 0.1,
+    revenue_growth: null,
+    earnings_growth: null,
     
-    success: false
+    success: false,
+    source: 'fallback',
+    is_estimated: false
   };
 }
 
-
-function determineMarket(symbol: string): string {
-  if (symbol.includes('.BK') || symbol.includes('.SET')) {
-    return 'SET';
-  }
-  return 'NASDAQ';
-}
 
 function mapSector(symbol: string): string {
   if (symbol.includes('.BK')) {
@@ -349,7 +422,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing request for ${symbols.length} symbols:`, symbols.slice(0, 5));
+    infoLog(`Processing request for ${symbols.length} symbols:`, symbols.slice(0, 5));
 
     const stockQuotes = [];
     const failedSymbols = [];
@@ -411,41 +484,44 @@ Deno.serve(async (req) => {
     const updatePromises = stockQuotes.map(async (quote) => {
       // Build dbData for database upsert with all extended fields
       const dbData = {
-        symbol: quote.symbol,
+        symbol: quote.symbol, // Already normalized
         company_name: quote.name,
         market: quote.market,
-        sector: mapSector(quote.symbol),
-        current_price: quote.price,
-        previous_close: quote.price - quote.change,
+        sector: quote.sector,
+        current_price: quote.current_price,
+        previous_close: quote.previous_close,
         open_price: quote.open,
         day_high: quote.dayHigh,
         day_low: quote.dayLow,
         volume: quote.volume,
-        market_cap: quote.marketCap,
-        pe_ratio: quote.pe,
+        market_cap: quote.market_cap,
+        pe_ratio: quote.pe_ratio,
         eps: quote.eps,
-        dividend_yield: quote.dividendYield,
+        dividend_yield: quote.dividend_yield,
         
         // Extended metrics
         currency: quote.currency,
         change: quote.change,
         change_percent: quote.changePercent,
-        week_high_52: quote.weekHigh52,
-        week_low_52: quote.weekLow52,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: quote.exDividendDate,
-        dividend_date: quote.dividendDate,
-        payout_ratio: quote.payoutRatio,
-        book_value: quote.bookValue,
-        price_to_book: quote.priceToBook,
+        week_high_52: quote.week_high_52,
+        week_low_52: quote.week_low_52,
+        dividend_rate: quote.dividend_rate,
+        ex_dividend_date: quote.ex_dividend_date,
+        dividend_date: quote.dividend_date,
+        payout_ratio: quote.payout_ratio,
+        book_value: quote.book_value,
+        price_to_book: quote.price_to_book,
         beta: quote.beta,
         roe: quote.roe,
-        profit_margin: quote.profitMargin,
-        operating_margin: quote.operatingMargin,
-        debt_to_equity: quote.debtToEquity,
-        current_ratio: quote.currentRatio,
-        revenue_growth: quote.revenueGrowth,
-        earnings_growth: quote.earningsGrowth,
+        profit_margin: quote.profit_margin,
+        operating_margin: quote.operating_margin,
+        debt_to_equity: quote.debt_to_equity,
+        current_ratio: quote.current_ratio,
+        revenue_growth: quote.revenue_growth,
+        earnings_growth: quote.earnings_growth,
+        
+        // New fields
+        is_estimated: quote.is_estimated,
         
         last_updated: new Date().toISOString()
       };
@@ -466,38 +542,42 @@ Deno.serve(async (req) => {
         symbol: quote.symbol,
         company_name: quote.name,
         market: quote.market,
-        sector: mapSector(quote.symbol),
-        current_price: quote.price,
-        previous_close: quote.price - quote.change,
+        sector: quote.sector,
+        current_price: quote.current_price,
+        previous_close: quote.previous_close,
         open_price: quote.open,
         day_high: quote.dayHigh,
         day_low: quote.dayLow,
         volume: quote.volume,
-        market_cap: quote.marketCap,
-        pe_ratio: quote.pe,
+        market_cap: quote.market_cap,
+        pe_ratio: quote.pe_ratio,
         eps: quote.eps,
-        dividend_yield: quote.dividendYield,
+        dividend_yield: quote.dividend_yield,
         
         // Extended metrics in snake_case for frontend consumption
         currency: quote.currency,
         change: quote.change,
         change_percent: quote.changePercent,
-        week_high_52: quote.weekHigh52,
-        week_low_52: quote.weekLow52,
-        dividend_rate: quote.dividendRate,
-        ex_dividend_date: quote.exDividendDate,
-        dividend_date: quote.dividendDate,
-        payout_ratio: quote.payoutRatio,
-        book_value: quote.bookValue,
-        price_to_book: quote.priceToBook,
+        week_high_52: quote.week_high_52,
+        week_low_52: quote.week_low_52,
+        dividend_rate: quote.dividend_rate,
+        ex_dividend_date: quote.ex_dividend_date,
+        dividend_date: quote.dividend_date,
+        payout_ratio: quote.payout_ratio,
+        book_value: quote.book_value,
+        price_to_book: quote.price_to_book,
         beta: quote.beta,
         roe: quote.roe,
-        profit_margin: quote.profitMargin,
-        operating_margin: quote.operatingMargin,
-        debt_to_equity: quote.debtToEquity,
-        current_ratio: quote.currentRatio,
-        revenue_growth: quote.revenueGrowth,
-        earnings_growth: quote.earningsGrowth,
+        profit_margin: quote.profit_margin,
+        operating_margin: quote.operating_margin,
+        debt_to_equity: quote.debt_to_equity,
+        current_ratio: quote.current_ratio,
+        revenue_growth: quote.revenue_growth,
+        earnings_growth: quote.earnings_growth,
+        
+        // Response metadata
+        is_estimated: quote.is_estimated,
+        source: quote.source,
         
         last_updated: new Date().toISOString()
       };
@@ -505,7 +585,7 @@ Deno.serve(async (req) => {
 
     const apiData = await Promise.all(updatePromises);
 
-    console.log(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
+    infoLog(`Successfully processed ${stockQuotes.length} stocks, failed: ${failedSymbols.length}`);
 
     return new Response(
       JSON.stringify({
