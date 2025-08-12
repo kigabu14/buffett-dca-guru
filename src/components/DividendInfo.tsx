@@ -9,18 +9,20 @@ interface DividendInfoProps {
 }
 
 export const DividendInfo = ({ stock }: DividendInfoProps) => {
-  const formatDividendYield = (yieldValue: number) => {
-    if (yieldValue <= 0) return '-';
+  const formatDividendYield = (yieldValue: number | null) => {
+    if (yieldValue === null) return '-';
+    if (yieldValue === 0) return '0.00%';
     return `${(yieldValue * 100).toFixed(2)}%`;
   };
 
-  const formatDividendRate = (rate: number, currency: string) => {
-    if (rate <= 0) return '-';
+  const formatDividendRate = (rate: number | null, currency: string) => {
+    if (rate === null) return '-';
+    if (rate === 0) return '0.00';
     return YahooFinanceService.formatCurrency(rate, currency);
   };
 
-  const formatPriceRange = (low: number, high: number, currency: string) => {
-    if (low <= 0 || high <= 0) return '-';
+  const formatPriceRange = (low: number | null, high: number | null, currency: string) => {
+    if (low === null || high === null || low <= 0 || high <= 0) return '-';
     return `${YahooFinanceService.formatCurrency(low, currency)} - ${YahooFinanceService.formatCurrency(high, currency)}`;
   };
 
@@ -39,7 +41,7 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-green-600" />
             <span className="font-semibold text-lg">
-              {stock.forwardDividendYield > 0 ? 
+              {stock.forwardDividendYield !== null && stock.forwardDividendYield > 0 ? 
                 `${formatDividendRate(stock.dividendRate, stock.currency)} (${formatDividendYield(stock.forwardDividendYield)})` : 
                 formatDividendRate(stock.dividendRate, stock.currency) + ' (' + formatDividendYield(stock.dividendYield) + ')'
               }
@@ -100,7 +102,7 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
         </div>
 
         {/* Status Information */}
-        {stock.dividendYield > 0 && (
+        {stock.dividendYield !== null && stock.dividendYield > 0 && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg">
             <div className="text-sm">
               <div className="font-semibold text-green-800 mb-1">สถานะเงินปันผล</div>
@@ -116,11 +118,20 @@ export const DividendInfo = ({ stock }: DividendInfoProps) => {
           </div>
         )}
 
-        {stock.dividendYield <= 0 && (
+        {stock.dividendYield === null && (
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <div className="text-sm text-gray-600">
               <div className="font-semibold mb-1">ไม่มีข้อมูลเงินปันผล</div>
-              <div>หุ้นนี้อาจไม่จ่ายเงินปันผล หรือไม่มีข้อมูลในระบบ</div>
+              <div>หุ้นนี้ไม่มีข้อมูลเงินปันผลในระบบ</div>
+            </div>
+          </div>
+        )}
+
+        {stock.dividendYield === 0 && (
+          <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+            <div className="text-sm text-yellow-700">
+              <div className="font-semibold mb-1">ไม่ได้จ่ายปันผล</div>
+              <div>หุ้นนี้ไม่ได้จ่ายเงินปันผลในปัจจุบัน</div>
             </div>
           </div>
         )}

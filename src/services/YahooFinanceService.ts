@@ -8,37 +8,37 @@ export interface StockData {
   market: string;
   currency: string;
   price: number;
-  change: number;
-  changePercent: number;
-  marketCap: number;
-  pe: number;
-  eps: number;
-  dividendYield: number;
-  dividendRate: number;
+  change: number | null;
+  changePercent: number | null;
+  marketCap: number | null;
+  pe: number | null;
+  eps: number | null;
+  dividendYield: number | null;
+  dividendRate: number | null;
   exDividendDate: string | null;
   dividendDate: string | null;
   earningsDate: string | null;
-  forwardDividendYield: number;
-  dayHigh: number;
-  dayLow: number;
-  weekHigh52: number;
-  weekLow52: number;
-  volume: number;
+  forwardDividendYield: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  weekHigh52: number | null;
+  weekLow52: number | null;
+  volume: number | null;
   
   // Warren Buffett Analysis Metrics
-  roe: number;
-  debtToEquity: number;
-  profitMargin: number;
-  operatingMargin: number;
-  currentRatio: number;
+  roe: number | null;
+  debtToEquity: number | null;
+  profitMargin: number | null;
+  operatingMargin: number | null;
+  currentRatio: number | null;
   
   // Extended metrics (as specified in problem statement)
-  bookValue: number;
-  priceToBook: number;
-  beta: number;
+  bookValue: number | null;
+  priceToBook: number | null;
+  beta: number | null;
   payoutRatio: number | null;
-  revenueGrowth: number;
-  earningsGrowth: number;
+  revenueGrowth: number | null;
+  earningsGrowth: number | null;
   
   // Sample data flag
   isSampleData?: boolean;
@@ -74,49 +74,60 @@ export class YahooFinanceService {
       if (data?.data && data.data.length > 0) {
         const stockData = data.data[0];
         
-        // Properly compute change/changePercent with fallback
-        const currentPrice = stockData.current_price || 0;
-        const previousClose = stockData.previous_close || 0;
-        const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
-        const changePercent = stockData.change_percent !== undefined ? 
-          stockData.change_percent : 
-          (previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0);
+        // Ensure change & changePercent computation respects null (avoid NaN if previous_close null)
+        const currentPrice = stockData.current_price ?? null;
+        const previousClose = stockData.previous_close ?? null;
+        
+        let change = null;
+        let changePercent = null;
+        
+        if (stockData.change !== undefined && stockData.change !== null) {
+          change = stockData.change;
+        } else if (currentPrice !== null && previousClose !== null) {
+          change = currentPrice - previousClose;
+        }
+        
+        if (stockData.change_percent !== undefined && stockData.change_percent !== null) {
+          changePercent = stockData.change_percent;
+        } else if (change !== null && previousClose !== null && previousClose > 0) {
+          changePercent = (change / previousClose) * 100;
+        }
         
         return {
           symbol: stockData.symbol,
           name: stockData.company_name || stockData.name || symbol,
           market: stockData.market,
           currency: stockData.currency || (symbol.includes('.BK') ? 'THB' : 'USD'),
-          price: currentPrice,
+          price: currentPrice ?? 0,
           change: change,
           changePercent: changePercent,
-          marketCap: stockData.market_cap || 0,
-          pe: stockData.pe_ratio || 0,
-          eps: stockData.eps || 0,
-          dividendYield: stockData.dividend_yield || 0,
-          dividendRate: stockData.dividend_rate || 0,
+          marketCap: stockData.market_cap ?? null,
+          pe: stockData.pe_ratio ?? null,
+          eps: stockData.eps ?? null,
+          dividendYield: stockData.dividend_yield ?? null,
+          dividendRate: stockData.dividend_rate ?? null,
           exDividendDate: stockData.ex_dividend_date || null,
           dividendDate: stockData.dividend_date || null,
           earningsDate: stockData.earnings_date || null,
-          forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
-          dayHigh: stockData.day_high || 0,
-          dayLow: stockData.day_low || 0,
-          weekHigh52: stockData.week_high_52 || 0,
-          weekLow52: stockData.week_low_52 || 0,
-          volume: stockData.volume || 0,
-          roe: stockData.roe || 0,
-          debtToEquity: stockData.debt_to_equity || 0,
-          profitMargin: stockData.profit_margin || 0,
-          operatingMargin: stockData.operating_margin || 0,
-          currentRatio: stockData.current_ratio || 0,
+          forwardDividendYield: stockData.forward_dividend_yield ?? stockData.dividend_yield ?? null,
+          dayHigh: stockData.day_high ?? null,
+          dayLow: stockData.day_low ?? null,
+          weekHigh52: stockData.week_high_52 ?? null,
+          weekLow52: stockData.week_low_52 ?? null,
+          volume: stockData.volume ?? null,
+          roe: stockData.roe ?? null,
+          debtToEquity: stockData.debt_to_equity ?? null,
+          profitMargin: stockData.profit_margin ?? null,
+          operatingMargin: stockData.operating_margin ?? null,
+          currentRatio: stockData.current_ratio ?? null,
           
           // Extended metrics mapping (snake_case to camelCase)
-          bookValue: stockData.book_value || 0,
-          priceToBook: stockData.price_to_book || 0,
-          beta: stockData.beta || 1.0,
-          payoutRatio: stockData.payout_ratio || null,
-          revenueGrowth: stockData.revenue_growth || 0,
-          earningsGrowth: stockData.earnings_growth || 0,
+          bookValue: stockData.book_value ?? null,
+          priceToBook: stockData.price_to_book ?? null,
+          beta: stockData.beta ?? null,
+          payoutRatio: stockData.payout_ratio ?? null,
+          revenueGrowth: stockData.revenue_growth ?? null,
+          earningsGrowth: stockData.earnings_growth ?? null,
           
           isSampleData: false
         };
@@ -145,49 +156,60 @@ export class YahooFinanceService {
 
       if (data?.data && data.data.length > 0) {
         return data.data.map((stockData: any) => {
-          // Properly compute change/changePercent with fallback
-          const currentPrice = stockData.current_price || 0;
-          const previousClose = stockData.previous_close || 0;
-          const change = stockData.change !== undefined ? stockData.change : (currentPrice - previousClose);
-          const changePercent = stockData.change_percent !== undefined ? 
-            stockData.change_percent : 
-            (previousClose > 0 ? ((currentPrice - previousClose) / previousClose) * 100 : 0);
+          // Ensure change & changePercent computation respects null (avoid NaN if previous_close null)
+          const currentPrice = stockData.current_price ?? null;
+          const previousClose = stockData.previous_close ?? null;
+          
+          let change = null;
+          let changePercent = null;
+          
+          if (stockData.change !== undefined && stockData.change !== null) {
+            change = stockData.change;
+          } else if (currentPrice !== null && previousClose !== null) {
+            change = currentPrice - previousClose;
+          }
+          
+          if (stockData.change_percent !== undefined && stockData.change_percent !== null) {
+            changePercent = stockData.change_percent;
+          } else if (change !== null && previousClose !== null && previousClose > 0) {
+            changePercent = (change / previousClose) * 100;
+          }
           
           return {
             symbol: stockData.symbol,
             name: stockData.company_name || stockData.name || stockData.symbol,
             market: stockData.market,
             currency: stockData.currency || (stockData.symbol.includes('.BK') ? 'THB' : 'USD'),
-            price: currentPrice,
+            price: currentPrice ?? 0,
             change: change,
             changePercent: changePercent,
-            marketCap: stockData.market_cap || 0,
-            pe: stockData.pe_ratio || 0,
-            eps: stockData.eps || 0,
-            dividendYield: stockData.dividend_yield || 0,
-            dividendRate: stockData.dividend_rate || 0,
+            marketCap: stockData.market_cap ?? null,
+            pe: stockData.pe_ratio ?? null,
+            eps: stockData.eps ?? null,
+            dividendYield: stockData.dividend_yield ?? null,
+            dividendRate: stockData.dividend_rate ?? null,
             exDividendDate: stockData.ex_dividend_date || null,
             dividendDate: stockData.dividend_date || null,
             earningsDate: stockData.earnings_date || null,
-            forwardDividendYield: stockData.forward_dividend_yield || stockData.dividend_yield || 0,
-            dayHigh: stockData.day_high || 0,
-            dayLow: stockData.day_low || 0,
-            weekHigh52: stockData.week_high_52 || 0,
-            weekLow52: stockData.week_low_52 || 0,
-            volume: stockData.volume || 0,
-            roe: stockData.roe || 0,
-            debtToEquity: stockData.debt_to_equity || 0,
-            profitMargin: stockData.profit_margin || 0,
-            operatingMargin: stockData.operating_margin || 0,
-            currentRatio: stockData.current_ratio || 0,
+            forwardDividendYield: stockData.forward_dividend_yield ?? stockData.dividend_yield ?? null,
+            dayHigh: stockData.day_high ?? null,
+            dayLow: stockData.day_low ?? null,
+            weekHigh52: stockData.week_high_52 ?? null,
+            weekLow52: stockData.week_low_52 ?? null,
+            volume: stockData.volume ?? null,
+            roe: stockData.roe ?? null,
+            debtToEquity: stockData.debt_to_equity ?? null,
+            profitMargin: stockData.profit_margin ?? null,
+            operatingMargin: stockData.operating_margin ?? null,
+            currentRatio: stockData.current_ratio ?? null,
             
             // Extended metrics mapping (snake_case to camelCase)
-            bookValue: stockData.book_value || 0,
-            priceToBook: stockData.price_to_book || 0,
-            beta: stockData.beta || 1.0,
-            payoutRatio: stockData.payout_ratio || null,
-            revenueGrowth: stockData.revenue_growth || 0,
-            earningsGrowth: stockData.earnings_growth || 0,
+            bookValue: stockData.book_value ?? null,
+            priceToBook: stockData.price_to_book ?? null,
+            beta: stockData.beta ?? null,
+            payoutRatio: stockData.payout_ratio ?? null,
+            revenueGrowth: stockData.revenue_growth ?? null,
+            earningsGrowth: stockData.earnings_growth ?? null,
             
             isSampleData: false
           };
