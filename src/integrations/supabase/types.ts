@@ -497,6 +497,8 @@ export type Database = {
           symbol: string
           updated_at: string
           volume: number | null
+          week_high_52: number | null
+          week_low_52: number | null
         }
         Insert: {
           company_name: string
@@ -518,6 +520,8 @@ export type Database = {
           symbol: string
           updated_at?: string
           volume?: number | null
+          week_high_52?: number | null
+          week_low_52?: number | null
         }
         Update: {
           company_name?: string
@@ -539,6 +543,8 @@ export type Database = {
           symbol?: string
           updated_at?: string
           volume?: number | null
+          week_high_52?: number | null
+          week_low_52?: number | null
         }
         Relationships: []
       }

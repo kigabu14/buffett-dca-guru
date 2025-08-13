@@ -487,7 +487,7 @@ Deno.serve(async (req) => {
     const updatePromises = stockQuotes.map(async (quote) => {
       // Build dbData for database upsert with all extended fields
       const dbData = {
-        symbol: quote.symbol, // Already normalized
+        symbol: quote.symbol,
         company_name: quote.name,
         market: quote.market,
         sector: quote.sector,
@@ -501,32 +501,9 @@ Deno.serve(async (req) => {
         pe_ratio: quote.pe_ratio,
         eps: quote.eps,
         dividend_yield: quote.dividend_yield,
-        
-        // Extended metrics
-        currency: quote.currency,
-        change: quote.change,
-        change_percent: quote.changePercent,
         week_high_52: quote.week_high_52,
         week_low_52: quote.week_low_52,
-        dividend_rate: quote.dividend_rate,
-        ex_dividend_date: quote.ex_dividend_date,
-        dividend_date: quote.dividend_date,
-        payout_ratio: quote.payout_ratio,
-        book_value: quote.book_value,
-        price_to_book: quote.price_to_book,
-        beta: quote.beta,
-        roe: quote.roe,
-        profit_margin: quote.profit_margin,
-        operating_margin: quote.operating_margin,
-        debt_to_equity: quote.debt_to_equity,
-        current_ratio: quote.current_ratio,
-        revenue_growth: quote.revenue_growth,
-        earnings_growth: quote.earnings_growth,
-        
-        // New fields
-        is_estimated: quote.is_estimated,
-        
-        last_updated: new Date().toISOString()
+        last_updated: new Date().toISOString(),
       };
 
       const { error } = await supabase
