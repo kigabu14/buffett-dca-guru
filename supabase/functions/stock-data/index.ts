@@ -126,7 +126,7 @@ async function fetchFinancialData(symbol: string) {
 
 // Fetch chart data (price, volume, etc.)
 async function fetchChartData(symbol: string) {
-  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}`;
+  const chartUrl = `${YAHOO_FINANCE_BASE}/${symbol}?range=5y&interval=1d`;
   
   const response = await fetchWithRetry(chartUrl, {
     headers: {
@@ -150,7 +150,8 @@ async function fetchQuoteSummary(symbol: string) {
     'summaryDetail',
     'quoteType',
     'price',
-    'summaryProfile'
+    'summaryProfile',
+    'fundProfile'
   ].join(',');
   
   const summaryUrl = `${YAHOO_FINANCE_QUOTESUMMARY}/${symbol}?modules=${modules}`;
@@ -236,7 +237,28 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
     const summaryDetail = summaryResult?.summaryDetail || {};
     const price = summaryResult?.price || {};
     const summaryProfile = summaryResult?.summaryProfile || {};
+    const fundProfile = summaryResult?.fundProfile || {};
 
+    // Prepare closes for returns/sparkline
+    const closes: number[] = result.indicators?.quote?.[0]?.close || [];
+    const getTrailingReturn = (tradingDays: number): number | null => {
+      if (!closes?.length || closes.length <= tradingDays) return null;
+      const last = closes[closes.length - 1];
+      const prev = closes[closes.length - 1 - tradingDays];
+      if (!last || !prev || prev <= 0) return null;
+      return ((last - prev) / prev) * 100;
+    };
+
+    const trailing_return_1y = getTrailingReturn(252);
+    const trailing_return_3y = getTrailingReturn(252 * 3);
+    const trailing_return_5y = getTrailingReturn(252 * 5);
+    const sparkline = Array.isArray(closes) && closes.length > 0 ? closes.slice(-30) : null;
+
+    const is_etf = (summaryResult?.quoteType?.quoteType || price.quoteType || meta.instrumentType) === 'ETF';
+    const exchange = price.exchangeName || price.fullExchangeName || meta.exchangeName || meta.exchange || null;
+    const total_assets = fundProfile.totalAssets?.raw || defaultKeyStats.totalAssets?.raw || null;
+    const expense_ratio = fundProfile.annualReportExpenseRatio?.raw || null;
+    const fund_category = fundProfile.categoryName || fundProfile.category || null;
     // Currency - prefer meta over summary
     const currency = meta.currency || summaryDetail.currency || (market === 'SET' ? 'THB' : 'USD');
 
@@ -299,16 +321,29 @@ function parseComprehensiveData(chartData: any, summaryData: any, originalSymbol
       market: market,
       currency: currency,
       sector: sector,
-      
+
+      // Classification
+      is_etf,
+      exchange,
+      fund_category,
+
       // Price data
       open: open,
       dayHigh: dayHigh,
       dayLow: dayLow,
       volume: volume,
-      
+
       // Extended metrics
       ...extendedMetrics,
-      
+
+      // Fund/ETF metrics
+      total_assets,
+      expense_ratio,
+      trailing_return_1y,
+      trailing_return_3y,
+      trailing_return_5y,
+      sparkline,
+
       success: true,
       source: 'live',
       is_estimated: false
@@ -503,6 +538,16 @@ Deno.serve(async (req) => {
         dividend_yield: quote.dividend_yield,
         week_high_52: quote.week_high_52,
         week_low_52: quote.week_low_52,
+        // New ETF/Fund fields
+        is_etf: quote.is_etf ?? false,
+        exchange: quote.exchange ?? null,
+        fund_category: quote.fund_category ?? null,
+        total_assets: quote.total_assets ?? null,
+        expense_ratio: quote.expense_ratio ?? null,
+        trailing_return_1y: quote.trailing_return_1y ?? null,
+        trailing_return_3y: quote.trailing_return_3y ?? null,
+        trailing_return_5y: quote.trailing_return_5y ?? null,
+        sparkline: quote.sparkline ?? null,
         last_updated: new Date().toISOString(),
       };
 
@@ -554,6 +599,17 @@ Deno.serve(async (req) => {
         current_ratio: quote.current_ratio,
         revenue_growth: quote.revenue_growth,
         earnings_growth: quote.earnings_growth,
+
+        // ETF/Fund extras
+        is_etf: quote.is_etf ?? false,
+        exchange: quote.exchange ?? null,
+        fund_category: quote.fund_category ?? null,
+        total_assets: quote.total_assets ?? null,
+        expense_ratio: quote.expense_ratio ?? null,
+        trailing_return_1y: quote.trailing_return_1y ?? null,
+        trailing_return_3y: quote.trailing_return_3y ?? null,
+        trailing_return_5y: quote.trailing_return_5y ?? null,
+        sparkline: quote.sparkline ?? null,
         
         // Response metadata
         is_estimated: quote.is_estimated,

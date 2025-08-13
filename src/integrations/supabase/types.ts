@@ -485,8 +485,12 @@ export type Database = {
           day_low: number | null
           dividend_yield: number | null
           eps: number | null
+          exchange: string | null
+          expense_ratio: number | null
+          fund_category: string | null
           id: string
           industry: string | null
+          is_etf: boolean | null
           last_updated: string | null
           market: string
           market_cap: number | null
@@ -494,7 +498,12 @@ export type Database = {
           pe_ratio: number | null
           previous_close: number | null
           sector: string | null
+          sparkline: Json | null
           symbol: string
+          total_assets: number | null
+          trailing_return_1y: number | null
+          trailing_return_3y: number | null
+          trailing_return_5y: number | null
           updated_at: string
           volume: number | null
           week_high_52: number | null
@@ -508,8 +517,12 @@ export type Database = {
           day_low?: number | null
           dividend_yield?: number | null
           eps?: number | null
+          exchange?: string | null
+          expense_ratio?: number | null
+          fund_category?: string | null
           id?: string
           industry?: string | null
+          is_etf?: boolean | null
           last_updated?: string | null
           market: string
           market_cap?: number | null
@@ -517,7 +530,12 @@ export type Database = {
           pe_ratio?: number | null
           previous_close?: number | null
           sector?: string | null
+          sparkline?: Json | null
           symbol: string
+          total_assets?: number | null
+          trailing_return_1y?: number | null
+          trailing_return_3y?: number | null
+          trailing_return_5y?: number | null
           updated_at?: string
           volume?: number | null
           week_high_52?: number | null
@@ -531,8 +549,12 @@ export type Database = {
           day_low?: number | null
           dividend_yield?: number | null
           eps?: number | null
+          exchange?: string | null
+          expense_ratio?: number | null
+          fund_category?: string | null
           id?: string
           industry?: string | null
+          is_etf?: boolean | null
           last_updated?: string | null
           market?: string
           market_cap?: number | null
@@ -540,7 +562,12 @@ export type Database = {
           pe_ratio?: number | null
           previous_close?: number | null
           sector?: string | null
+          sparkline?: Json | null
           symbol?: string
+          total_assets?: number | null
+          trailing_return_1y?: number | null
+          trailing_return_3y?: number | null
+          trailing_return_5y?: number | null
           updated_at?: string
           volume?: number | null
           week_high_52?: number | null
