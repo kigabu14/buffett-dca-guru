@@ -11,17 +11,28 @@ function calculateBuffettAnalysis(stockData: any) {
   let score = 0;
   const criteria = [];
   
-  // Extract financial metrics with defaults
-  const pe = stockData.pe || stockData.pe_ratio || 15;
-  const roe = stockData.roe || stockData.returnOnEquity || 0.15;
-  const debtToEquity = stockData.debtToEquity || stockData.debt_to_equity || 0.5;
-  const profitMargin = stockData.profitMargin || stockData.profit_margin || 0.15;
-  const operatingMargin = stockData.operatingMargin || stockData.operating_margin || 0.20;
-  const currentRatio = stockData.currentRatio || stockData.current_ratio || 2.0;
-  const dividendYield = stockData.dividendYield || stockData.dividend_yield || 0.03;
+  // Extract financial metrics with defaults - use correct field names from stock-data
+  const pe = stockData.pe_ratio || 15;
+  const roe = stockData.roe || 0.15;
+  const debtToEquity = stockData.debt_to_equity || 0.5;
+  const profitMargin = stockData.profit_margin || 0.15;
+  const operatingMargin = stockData.operating_margin || 0.20;
+  const currentRatio = stockData.current_ratio || 2.0;
+  const dividendYield = stockData.dividend_yield || 0.03;
   const eps = stockData.eps || (stockData.current_price || stockData.price || 100) / pe;
-  const priceToBook = stockData.priceToBook || 1.5;
-  const revenueGrowth = stockData.revenueGrowth || 0.1;
+  const priceToBook = stockData.price_to_book || 1.5;
+  const revenueGrowth = stockData.revenue_growth || 0.1;
+  
+  console.log(`Financial metrics for ${stockData.symbol}:`, {
+    pe_ratio: pe,
+    roe: roe,
+    debt_to_equity: debtToEquity,
+    profit_margin: profitMargin,
+    operating_margin: operatingMargin,
+    current_ratio: currentRatio,
+    dividend_yield: dividendYield,
+    eps: eps
+  });
   
   // 1. Return on Equity (ROE) > 15%
   if (roe > 0.15) {
@@ -122,17 +133,18 @@ function calculateBuffettAnalysis(stockData: any) {
     criteria: criteria,
     analysis_date: new Date().toISOString(),
     
-    // Store individual metrics for reference
-    roe: roe,
-    debt_to_equity: debtToEquity,
-    profit_margin: profitMargin,
-    operating_margin: operatingMargin,
+    // Store individual metrics for reference - use consistent field names
+    roe_percentage: roe * 100, // Convert to percentage
+    debt_equity_ratio: debtToEquity,
+    net_profit_margin: profitMargin * 100, // Convert to percentage
+    operating_margin: operatingMargin * 100, // Convert to percentage
     current_ratio: currentRatio,
     pe_ratio: pe,
-    dividend_yield: dividendYield,
+    dividend_yield: dividendYield * 100, // Convert to percentage
     eps: eps,
     price_to_book: priceToBook,
-    revenue_growth: revenueGrowth
+    revenue_growth: revenueGrowth,
+    current_price: stockData.current_price || stockData.price
   };
 }
 
@@ -143,13 +155,13 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { symbol, stockData } = body;
+    const { symbol } = body;
     
-    if (!symbol || !stockData) {
+    if (!symbol) {
       return new Response(
         JSON.stringify({ 
-          error: 'Symbol and stock data are required',
-          message: 'กรุณาส่งข้อมูล symbol และ stockData'
+          error: 'Symbol is required',
+          message: 'กรุณาส่งข้อมูล symbol'
         }),
         { 
           status: 400,
@@ -160,13 +172,53 @@ Deno.serve(async (req) => {
 
     console.log(`Analyzing ${symbol} with Buffett criteria`);
     
-    // Perform Buffett analysis
-    const analysis = calculateBuffettAnalysis(stockData);
-    
-    // Connect to Supabase and save analysis
+    // First get real stock data from Yahoo Finance via stock-data function
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    console.log(`Fetching fresh data for ${symbol} from Yahoo Finance...`);
+    
+    // Call stock-data function to get fresh data
+    const { data: stockDataResponse, error: stockDataError } = await supabase.functions.invoke('stock-data', {
+      body: { symbols: [symbol] }
+    });
+    
+    if (stockDataError) {
+      console.error(`Error fetching stock data for ${symbol}:`, stockDataError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to fetch stock data',
+          message: 'ไม่สามารถดึงข้อมูลหุ้นได้',
+          details: stockDataError.message
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    const stockInfo = stockDataResponse?.data?.[0];
+    if (!stockInfo) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'No stock data found',
+          message: 'ไม่พบข้อมูลหุ้น'
+        }),
+        { 
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    console.log(`Stock data for ${symbol}:`, JSON.stringify(stockInfo, null, 2));
+    
+    // Perform Buffett analysis with real data
+    const analysis = calculateBuffettAnalysis(stockInfo);
+    
+    // Save analysis to database
 
     // Save to buffett_analysis table
     const { error } = await supabase
