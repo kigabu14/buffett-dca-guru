@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
@@ -41,6 +41,78 @@ export type Database = {
           updated_at?: string
           user_id?: string
           weights?: Json
+        }
+        Relationships: []
+      }
+      backtest_results: {
+        Row: {
+          created_at: string
+          end_date: string
+          final_capital: number
+          id: string
+          initial_capital: number
+          max_drawdown: number
+          profitable_trades: number
+          sharpe_ratio: number | null
+          start_date: string
+          stop_loss: number | null
+          strategy: string
+          symbol: string
+          take_profit: number | null
+          time_period: string | null
+          timeframe: string
+          total_return: number
+          total_trades: number
+          trade_details: Json | null
+          updated_at: string
+          user_id: string
+          win_rate: number
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          final_capital: number
+          id?: string
+          initial_capital?: number
+          max_drawdown: number
+          profitable_trades?: number
+          sharpe_ratio?: number | null
+          start_date: string
+          stop_loss?: number | null
+          strategy: string
+          symbol: string
+          take_profit?: number | null
+          time_period?: string | null
+          timeframe: string
+          total_return: number
+          total_trades?: number
+          trade_details?: Json | null
+          updated_at?: string
+          user_id: string
+          win_rate?: number
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          final_capital?: number
+          id?: string
+          initial_capital?: number
+          max_drawdown?: number
+          profitable_trades?: number
+          sharpe_ratio?: number | null
+          start_date?: string
+          stop_loss?: number | null
+          strategy?: string
+          symbol?: string
+          take_profit?: number | null
+          time_period?: string | null
+          timeframe?: string
+          total_return?: number
+          total_trades?: number
+          trade_details?: Json | null
+          updated_at?: string
+          user_id?: string
+          win_rate?: number
         }
         Relationships: []
       }
